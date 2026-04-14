@@ -18,10 +18,15 @@ export default function Dashboard() {
         fetch("/api/prices").then((r) => r.json()),
         fetch("/api/history").then((r) => r.json()),
       ]);
-      setStatus(s);
-      setPrices(p);
-      setHistory(h);
-      setError(null);
+      if (s.error) {
+        setError(s.error);
+        setStatus(null);
+      } else {
+        setStatus(s);
+        setError(null);
+      }
+      if (!p.error) setPrices(p);
+      setHistory(Array.isArray(h) ? h : []);
     } catch (err) {
       setError(String(err));
     }
