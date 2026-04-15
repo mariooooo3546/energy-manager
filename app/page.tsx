@@ -19,11 +19,21 @@ export default function Dashboard() {
 
   async function fetchAll() {
     try {
+      const safeFetch = async (url: string) => {
+        try {
+          const r = await fetch(url);
+          if (!r.ok) return { error: `HTTP ${r.status}` };
+          const text = await r.text();
+          return text ? JSON.parse(text) : { error: "Empty response" };
+        } catch (e) {
+          return { error: String(e) };
+        }
+      };
       const [s, p, h, pr] = await Promise.all([
-        fetch("/api/status").then((r) => r.json()),
-        fetch("/api/prices").then((r) => r.json()),
-        fetch("/api/history").then((r) => r.json()),
-        fetch("/api/profit").then((r) => r.json()),
+        safeFetch("/api/status"),
+        safeFetch("/api/prices"),
+        safeFetch("/api/history"),
+        safeFetch("/api/profit"),
       ]);
       if (s.error) {
         setError(s.error);

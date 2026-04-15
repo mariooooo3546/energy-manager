@@ -6,14 +6,21 @@ export interface KVStore {
   set<T>(key: string, value: T): Promise<void>;
 }
 
-// --- File-based store (local development) ---
+// --- File-based store (local dev + Vercel fallback) ---
 
 class FileKVStore implements KVStore {
   private dir: string;
 
   constructor() {
-    this.dir = join(process.cwd(), "data");
-    if (!existsSync(this.dir)) mkdirSync(this.dir, { recursive: true });
+    // On Vercel, use /tmp (only writable directory)
+    // Locally, use data/ in project root
+    const base = process.env.VERCEL ? "/tmp" : join(process.cwd(), "data");
+    this.dir = base;
+    try {
+      if (!existsSync(this.dir)) mkdirSync(this.dir, { recursive: true });
+    } catch {
+      // Ignore mkdir errors
+    }
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -27,33 +34,56 @@ class FileKVStore implements KVStore {
   }
 
   async set<T>(key: string, value: T): Promise<void> {
-    const path = join(this.dir, `${key}.json`);
-    writeFileSync(path, JSON.stringify(value, null, 2));
+    try {
+      const path = join(this.dir, `${key}.json`);
+      writeFileSync(path, JSON.stringify(value, null, 2));
+    } catch {
+      // Ignore write errors on read-only filesystem
+    }
   }
 }
 
-// --- Vercel KV store (production) ---
+// --- Upstash Redis store (production on Vercel) ---
 
-class VercelKVStore implements KVStore {
-  private kv: { get: (key: string) => Promise<unknown>; set: (key: string, value: unknown) => Promise<unknown> } | null = null;
+class UpstashKVStore implements KVStore {
+  private url: string;
+  private token: string;
 
-  private async getKV() {
-    if (!this.kv) {
-      const mod = await import("@vercel/kv");
-      this.kv = mod.kv;
-    }
-    return this.kv!;
+  constructor() {
+    this.url = process.env.KV_REST_API_URL!;
+    this.token = process.env.KV_REST_API_TOKEN!;
   }
 
   async get<T>(key: string): Promise<T | null> {
-    const kv = await this.getKV();
-    const val = await kv.get(key);
-    return (val as T) ?? null;
+    try {
+      const res = await fetch(`${this.url}/get/${key}`, {
+        headers: { Authorization: `Bearer ${this.token}` },
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      if (data.result === null || data.result === undefined) return null;
+      // Upstash returns strings, parse JSON
+      return typeof data.result === "string"
+        ? JSON.parse(data.result)
+        : data.result;
+    } catch {
+      return null;
+    }
   }
 
   async set<T>(key: string, value: T): Promise<void> {
-    const kv = await this.getKV();
-    await kv.set(key, value);
+    try {
+      await fetch(`${this.url}/set/${key}`, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(JSON.stringify(value)),
+      });
+    } catch {
+      // Ignore errors
+    }
   }
 }
 
@@ -64,7 +94,7 @@ let store: KVStore | null = null;
 export function getStore(): KVStore {
   if (!store) {
     store = process.env.KV_REST_API_URL
-      ? new VercelKVStore()
+      ? new UpstashKVStore()
       : new FileKVStore();
   }
   return store;
