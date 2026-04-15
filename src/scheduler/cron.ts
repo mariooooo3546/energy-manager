@@ -144,6 +144,7 @@ async function applyAction(
         gridChargeAction: "off",
         touAction: "on",
         maxSellPower: maxPower,
+        maxSolarPower: 15000,
         timeUseSettingItems: slots,
       });
       break;

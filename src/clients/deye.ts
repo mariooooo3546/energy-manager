@@ -26,6 +26,7 @@ export interface DynamicControlParams {
   touAction: "on" | "off";
   touDays?: string[];
   maxSellPower: number;
+  maxSolarPower?: number;
   timeUseSettingItems: TouTimeSlot[];
 }
 
@@ -208,7 +209,7 @@ export class DeyeCloudClient {
 
   async setDynamicControl(params: DynamicControlParams): Promise<void> {
     await this.authenticate();
-    const body = {
+    const body: Record<string, unknown> = {
       deviceSn: this.config.deviceSn,
       workMode: params.workMode,
       solarSellAction: params.solarSellAction,
@@ -218,6 +219,9 @@ export class DeyeCloudClient {
       maxSellPower: params.maxSellPower,
       timeUseSettingItems: params.timeUseSettingItems,
     };
+    if (params.maxSolarPower !== undefined) {
+      body.maxSolarPower = params.maxSolarPower;
+    }
     console.log("[Deye] dynamicControl request:", JSON.stringify(body, null, 2));
     await this.request("/strategy/dynamicControl", body);
   }
