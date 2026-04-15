@@ -9,6 +9,7 @@ import { ProfitCard } from "./components/ProfitCard";
 import { ScheduleTable } from "./components/ScheduleTable";
 import { ConditionsCard } from "./components/ConditionsCard";
 import { PriceHistory } from "./components/PriceHistory";
+import { PvForecast } from "./components/PvForecast";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>(null);
@@ -87,6 +88,7 @@ export default function Dashboard() {
         <ActionButtons override={status?.override ?? null} onActionComplete={fetchAll} />
         {profit && <ProfitCard {...profit} />}
         {prices?.today && <PriceChart frames={prices.today} />}
+        <PvForecast />
         <PriceHistory />
         <ConditionsCard />
         <ScheduleTable />

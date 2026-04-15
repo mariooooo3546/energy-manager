@@ -20,15 +20,27 @@ export class DecisionEngine {
     let action: DecisionAction = "NORMAL";
     let reason = "Warunki niespelnione — self-consumption";
 
-    // Never sell below floor
-    if (
+    // BLOCK: Never sell at negative prices
+    if (currentSell < 0) {
+      action = "NORMAL";
+      reason = `Ujemna cena sprzedazy (${currentSell.toFixed(2)} zl) — blokada sprzedazy`;
+    }
+    // BLOCK: Never buy at negative sell price (grid pays us to take energy)
+    else if (currentBuy < 0 && soc <= c.buyMaxSoc) {
+      action = "CHARGE";
+      reason = `Ujemna cena kupna (${currentBuy.toFixed(2)} zl) — laduj za darmo!`;
+    }
+    // SELL conditions
+    else if (
       currentSell >= c.sellMinPrice &&
       soc >= c.sellMinSoc &&
       soc > c.minSocFloor
     ) {
       action = "SELL";
       reason = `Sprzedaz: cena ${currentSell.toFixed(2)} zl >= ${c.sellMinPrice.toFixed(2)} zl, SOC ${soc}% >= ${c.sellMinSoc}%`;
-    } else if (currentBuy <= c.buyMaxPrice && soc <= c.buyMaxSoc) {
+    }
+    // CHARGE conditions
+    else if (currentBuy <= c.buyMaxPrice && c.buyMaxPrice > 0 && soc <= c.buyMaxSoc) {
       action = "CHARGE";
       reason = `Ladowanie: cena ${currentBuy.toFixed(2)} zl <= ${c.buyMaxPrice.toFixed(2)} zl, SOC ${soc}% <= ${c.buyMaxSoc}%`;
     }

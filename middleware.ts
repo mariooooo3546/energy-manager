@@ -14,7 +14,7 @@ export function middleware(req: NextRequest) {
   }
 
   // Public read-only routes
-  const publicRoutes = ["/api/status", "/api/prices", "/api/history", "/api/conditions", "/api/schedule", "/api/profit"];
+  const publicRoutes = ["/api/status", "/api/prices", "/api/history", "/api/conditions", "/api/schedule", "/api/profit", "/api/forecast"];
   if (publicRoutes.some((r) => pathname.startsWith(r)) && req.method === "GET") {
     return NextResponse.next();
   }
