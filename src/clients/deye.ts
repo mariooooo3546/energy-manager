@@ -278,25 +278,36 @@ export class DeyeCloudClient {
     });
   }
 
-  private async request(path: string, body: Record<string, unknown>) {
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `bearer ${this.token}`,
-      },
-      body: JSON.stringify(body),
-    });
+  private async request(path: string, body: Record<string, unknown>, retries = 3): Promise<any> {
+    for (let attempt = 1; attempt <= retries; attempt++) {
+      const res = await fetch(`${BASE_URL}${path}`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `bearer ${this.token}`,
+        },
+        body: JSON.stringify(body),
+      });
 
-    const json = await res.json();
-    if (!res.ok) {
-      console.error(`[Deye] ${path} HTTP ${res.status}:`, JSON.stringify(json));
-      throw new Error(`Deye API error: ${res.status} - ${JSON.stringify(json)}`);
+      const json = await res.json();
+
+      // Retry on 500 (Deye server unavailable)
+      if (res.status >= 500 && attempt < retries) {
+        console.warn(`[Deye] ${path} HTTP ${res.status}, retry ${attempt}/${retries}...`);
+        await new Promise((r) => setTimeout(r, 2000 * attempt));
+        continue;
+      }
+
+      if (!res.ok) {
+        console.error(`[Deye] ${path} HTTP ${res.status}:`, JSON.stringify(json));
+        throw new Error(`Deye API error: ${res.status} - ${JSON.stringify(json)}`);
+      }
+      if (!json.success) {
+        console.error(`[Deye] ${path} failed:`, JSON.stringify(json));
+        throw new Error(`Deye API failed: ${json.msg}`);
+      }
+      return json;
     }
-    if (!json.success) {
-      console.error(`[Deye] ${path} failed:`, JSON.stringify(json));
-      throw new Error(`Deye API failed: ${json.msg}`);
-    }
-    return json;
+    throw new Error(`Deye API ${path}: all ${retries} retries failed`);
   }
 }
