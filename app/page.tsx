@@ -16,6 +16,7 @@ export default function Dashboard() {
   const [history, setHistory] = useState<any[]>([]);
   const [profit, setProfit] = useState<any>(null);
   const [error, setError] = useState<string | null>(null);
+  const [lastRefresh, setLastRefresh] = useState<Date | null>(null);
 
   async function fetchAll() {
     try {
@@ -45,6 +46,7 @@ export default function Dashboard() {
       if (!p.error) setPrices(p);
       setHistory(Array.isArray(h) ? h : []);
       if (!pr.error) setProfit(pr);
+      setLastRefresh(new Date());
     } catch (err) {
       setError(String(err));
     }
@@ -58,7 +60,22 @@ export default function Dashboard() {
 
   return (
     <main className="min-h-screen bg-gray-50 p-6">
-      <h1 className="text-2xl font-bold mb-6">Energy Manager</h1>
+      <div className="flex items-center justify-between mb-6">
+        <h1 className="text-2xl font-bold">Energy Manager</h1>
+        <div className="flex items-center gap-3">
+          {lastRefresh && (
+            <span className="text-xs text-gray-400">
+              Odświeżono: {lastRefresh.toLocaleTimeString("pl-PL")}
+            </span>
+          )}
+          <button
+            onClick={fetchAll}
+            className="px-3 py-1.5 text-sm bg-gray-100 hover:bg-gray-200 rounded transition-colors"
+          >
+            🔄 Odśwież
+          </button>
+        </div>
+      </div>
 
       {error && (
         <div className="mb-4 p-3 bg-red-100 text-red-800 rounded">{error}</div>
