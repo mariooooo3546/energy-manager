@@ -33,30 +33,32 @@ export async function runCycle(deps: SchedulerDeps): Promise<void> {
   // 1. Fetch inverter status
   const status = await deye.getStatus();
 
-  // 2. Check hourly schedule
+  // 2. Check hourly schedule (NADRZĘDNY - ma priorytet nad warunkami)
   const currentHour = new Date().getHours();
   const scheduledTarget = await getScheduleForHour(currentHour);
-  if (scheduledTarget !== null && status.soc > scheduledTarget) {
-    console.log(`[Scheduler] Schedule: SOC ${status.soc}% > target ${scheduledTarget}% → SELL`);
-    await applyAction(deye, "SELL");
-    const reason = `Harmonogram: SOC ${status.soc}% > cel ${scheduledTarget}%`;
+  if (scheduledTarget !== null) {
+    // Harmonogram jest ustawiony na tę godzinę - warunki nie mają znaczenia
+    const action = status.soc > scheduledTarget ? "SELL" : "NORMAL";
+    const reason = status.soc > scheduledTarget
+      ? `Harmonogram: SOC ${status.soc}% > cel ${scheduledTarget}% → sprzedaż`
+      : `Harmonogram: SOC ${status.soc}% <= cel ${scheduledTarget}% → trzymaj`;
+    console.log(`[Scheduler] ${reason}`);
+    await applyAction(deye, action);
     await logger.log({
       timestamp: new Date().toISOString(),
-      action: "SELL",
+      action,
       reason,
       soc: status.soc,
       buyPrice: 0,
       sellPrice: 0,
       thresholds: { lowPrice: 0, highPrice: 0 },
     });
-    onDecision?.("SELL", reason, status.soc);
+    onDecision?.(action, reason, status.soc);
     return;
   }
 
-  // 3. Fetch prices
+  // 3. Brak harmonogramu na tę godzinę → użyj warunków handlu
   const prices = await pstryk.getTodayPrices();
-
-  // 4. Decide
   const conditions = await getConditions();
   const engine = new DecisionEngine(conditions);
   const decision = engine.decide(prices.frames, currentHour, status.soc);
