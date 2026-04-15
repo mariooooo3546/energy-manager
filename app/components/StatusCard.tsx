@@ -49,19 +49,19 @@ export function StatusCard(props: Props) {
       <div className="grid grid-cols-2 gap-4 text-sm">
         <div>
           <span className="text-gray-500">PV</span>
-          <p className="font-mono text-lg">{props.pvPower}W</p>
+          <p className="font-mono text-lg text-gray-800">{props.pvPower}W</p>
         </div>
         <div>
           <span className="text-gray-500">Zuzycie</span>
-          <p className="font-mono text-lg">{props.loadPower}W</p>
+          <p className="font-mono text-lg text-gray-800">{props.loadPower}W</p>
         </div>
         <div>
           <span className="text-gray-500">Cena kupna</span>
-          <p className="font-mono text-lg">{props.buyPrice?.toFixed(2)} zl</p>
+          <p className="font-mono text-lg text-gray-800">{props.buyPrice?.toFixed(2)} zl</p>
         </div>
         <div>
           <span className="text-gray-500">Cena sprzedazy</span>
-          <p className="font-mono text-lg">{props.sellPrice?.toFixed(2)} zl</p>
+          <p className="font-mono text-lg text-gray-800">{props.sellPrice?.toFixed(2)} zl</p>
         </div>
       </div>
     </div>

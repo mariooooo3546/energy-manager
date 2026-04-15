@@ -22,7 +22,11 @@ export function DecisionLog({ decisions }: Props) {
         <div className="space-y-2">
           {decisions.map((d, i) => (
             <div key={i} className="flex items-center gap-3 text-sm">
-              <span className="font-mono text-gray-500 w-12">
+              <span className="font-mono text-gray-500 w-28 shrink-0">
+                {new Date(d.timestamp).toLocaleDateString("pl-PL", {
+                  day: "2-digit",
+                  month: "2-digit",
+                })}{" "}
                 {new Date(d.timestamp).toLocaleTimeString("pl-PL", {
                   hour: "2-digit",
                   minute: "2-digit",

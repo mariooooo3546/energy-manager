@@ -3,5 +3,5 @@ import { DecisionLogger } from "@/src/lib/logger";
 
 export async function GET() {
   const logger = new DecisionLogger();
-  return NextResponse.json(logger.getHistory(50));
+  return NextResponse.json(await logger.getHistory(50));
 }

@@ -29,6 +29,15 @@ export class PstrykClient {
     return this.fetchPrices(start, end);
   }
 
+  async getHistoricalPrices(daysBack: number): Promise<PstrykResponse> {
+    const end = new Date();
+    end.setHours(23, 59, 59, 999);
+    const start = new Date();
+    start.setDate(start.getDate() - daysBack);
+    start.setHours(0, 0, 0, 0);
+    return this.fetchPrices(start, end);
+  }
+
   private async fetchPrices(start: Date, end: Date): Promise<PstrykResponse> {
     const params = new URLSearchParams({
       metrics: "pricing",

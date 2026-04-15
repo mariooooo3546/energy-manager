@@ -1,30 +1,22 @@
-import fs from "fs";
-import path from "path";
+import { getStore } from "./storage";
 import { Decision } from "./types";
 
+const MAX_DECISIONS = 200;
+
 export class DecisionLogger {
-  private filePath: string;
-
-  constructor(filePath?: string) {
-    this.filePath = filePath ?? path.join(process.cwd(), "data", "decisions.json");
-  }
-
-  log(decision: Decision): void {
-    const dir = path.dirname(this.filePath);
-    if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-
-    const history = this.readAll();
+  async log(decision: Decision): Promise<void> {
+    const history = await this.readAll();
     history.push(decision);
-    fs.writeFileSync(this.filePath, JSON.stringify(history, null, 2));
+    const trimmed = history.slice(-MAX_DECISIONS);
+    await getStore().set("decisions", trimmed);
   }
 
-  getHistory(limit: number): Decision[] {
-    return this.readAll().reverse().slice(0, limit);
+  async getHistory(limit: number): Promise<Decision[]> {
+    const all = await this.readAll();
+    return all.slice(-limit);
   }
 
-  private readAll(): Decision[] {
-    if (!fs.existsSync(this.filePath)) return [];
-    const raw = fs.readFileSync(this.filePath, "utf-8");
-    return JSON.parse(raw);
+  async readAll(): Promise<Decision[]> {
+    return (await getStore().get<Decision[]>("decisions")) ?? [];
   }
 }

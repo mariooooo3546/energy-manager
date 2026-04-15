@@ -14,9 +14,10 @@ export async function GET() {
     });
     const pstryk = new PstrykClient(process.env.PSTRYK_API_KEY!);
 
-    const [status, prices] = await Promise.all([
+    const [status, prices, override] = await Promise.all([
       deye.getStatus(),
       pstryk.getTodayPrices(),
+      getOverride(),
     ]);
 
     const hour = new Date().getHours();
@@ -30,7 +31,7 @@ export async function GET() {
       gridPower: status.gridPower,
       buyPrice: currentFrame?.metrics.pricing.price_gross,
       sellPrice: currentFrame?.metrics.pricing.price_prosumer_gross,
-      override: getOverride(),
+      override,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

@@ -1,81 +1,160 @@
-import * as cron from "node-cron";
 import { PstrykClient } from "@/src/clients/pstryk";
 import { DeyeCloudClient } from "@/src/clients/deye";
 import { DecisionEngine } from "@/src/engine/decision";
 import { DecisionLogger } from "@/src/lib/logger";
-import { getEngineConfig, getOverride } from "@/src/lib/config";
+import {
+  getConditions,
+  getOverride,
+  getScheduleForHour,
+  getSchedule,
+  getMaxSellPower,
+} from "@/src/lib/config";
 import { DecisionAction } from "@/src/lib/types";
+import { TouTimeSlot } from "@/src/clients/deye";
 
-interface SchedulerDeps {
+export interface SchedulerDeps {
   pstryk: PstrykClient;
   deye: DeyeCloudClient;
   logger: DecisionLogger;
   onDecision?: (action: DecisionAction, reason: string, soc: number) => void;
 }
 
-export function startScheduler(deps: SchedulerDeps): cron.ScheduledTask {
-  const schedule = process.env.CRON_SCHEDULE || "55 * * * *";
-
-  return cron.schedule(schedule, async () => {
-    try {
-      await runCycle(deps);
-    } catch (err) {
-      console.error("[Scheduler] Error:", err);
-    }
-  });
-}
-
 export async function runCycle(deps: SchedulerDeps): Promise<void> {
   const { pstryk, deye, logger, onDecision } = deps;
 
   // Check for manual override
-  const override = getOverride();
+  const override = await getOverride();
   if (override.active && override.action) {
     console.log(`[Scheduler] Override active: ${override.action}`);
     await applyAction(deye, override.action);
     return;
   }
 
-  // 1. Fetch prices
-  const prices = await pstryk.getTodayPrices();
-
-  // 2. Fetch inverter status
+  // 1. Fetch inverter status
   const status = await deye.getStatus();
 
-  // 3. Decide
+  // 2. Check hourly schedule
   const currentHour = new Date().getHours();
-  const engine = new DecisionEngine(getEngineConfig());
+  const scheduledTarget = await getScheduleForHour(currentHour);
+  if (scheduledTarget !== null && status.soc > scheduledTarget) {
+    console.log(`[Scheduler] Schedule: SOC ${status.soc}% > target ${scheduledTarget}% → SELL`);
+    await applyAction(deye, "SELL");
+    const reason = `Harmonogram: SOC ${status.soc}% > cel ${scheduledTarget}%`;
+    await logger.log({
+      timestamp: new Date().toISOString(),
+      action: "SELL",
+      reason,
+      soc: status.soc,
+      buyPrice: 0,
+      sellPrice: 0,
+      thresholds: { lowPrice: 0, highPrice: 0 },
+    });
+    onDecision?.("SELL", reason, status.soc);
+    return;
+  }
+
+  // 3. Fetch prices
+  const prices = await pstryk.getTodayPrices();
+
+  // 4. Decide
+  const conditions = await getConditions();
+  const engine = new DecisionEngine(conditions);
   const decision = engine.decide(prices.frames, currentHour, status.soc);
 
-  // 4. Apply
+  // 5. Apply
   await applyAction(deye, decision.action);
 
-  // 5. Log
-  logger.log(decision);
+  // 6. Log
+  await logger.log(decision);
   console.log(`[Scheduler] ${decision.action}: ${decision.reason}`);
 
-  // 6. Notify
+  // 7. Notify
   onDecision?.(decision.action, decision.reason, status.soc);
+}
+
+async function buildTouSlots(): Promise<TouTimeSlot[]> {
+  const schedule = await getSchedule();
+  const maxPower = getMaxSellPower();
+
+  // Deye requires exactly 6 TOU time slots.
+  const activeSlots: TouTimeSlot[] = [];
+  for (let h = 0; h < 24; h++) {
+    const target = schedule[String(h)];
+    if (target !== undefined) {
+      activeSlots.push({
+        time: `${String(h).padStart(2, "0")}:00`,
+        power: maxPower,
+        soc: target,
+        enableGeneration: true,
+        enableGridCharge: false,
+      });
+    }
+  }
+
+  const usedHours = new Set(Object.keys(schedule).map(Number));
+  const passiveHours = Array.from({ length: 24 }, (_, i) => i).filter(
+    (h) => !usedHours.has(h)
+  );
+
+  const passiveSlot = (hour: number): TouTimeSlot => ({
+    time: `${String(hour).padStart(2, "0")}:00`,
+    power: 0,
+    soc: 100,
+    enableGeneration: true,
+    enableGridCharge: false,
+  });
+
+  const slots = [...activeSlots];
+  const needed = 6 - slots.length;
+  if (needed > 0) {
+    const step = Math.max(1, Math.floor(passiveHours.length / needed));
+    for (let i = 0; i < needed && i * step < passiveHours.length; i++) {
+      slots.push(passiveSlot(passiveHours[i * step]));
+    }
+  }
+
+  slots.sort((a, b) => a.time.localeCompare(b.time));
+  return slots.slice(0, 6);
 }
 
 async function applyAction(
   deye: DeyeCloudClient,
   action: DecisionAction
 ): Promise<void> {
+  const maxPower = getMaxSellPower();
+
   switch (action) {
     case "CHARGE":
-      await deye.setGridCharge(true);
-      await deye.setSolarSell(false);
+      await deye.setDynamicControl({
+        workMode: "ZERO_EXPORT_TO_LOAD",
+        solarSellAction: "off",
+        gridChargeAction: "on",
+        touAction: "off",
+        maxSellPower: 0,
+        timeUseSettingItems: await buildTouSlots(),
+      });
       break;
-    case "SELL":
-      await deye.setGridCharge(false);
-      await deye.setSolarSell(true);
-      await deye.setWorkMode("SELLING_FIRST");
+    case "SELL": {
+      const slots = await buildTouSlots();
+      await deye.setDynamicControl({
+        workMode: "SELLING_FIRST",
+        solarSellAction: "on",
+        gridChargeAction: "off",
+        touAction: "on",
+        maxSellPower: maxPower,
+        timeUseSettingItems: slots,
+      });
       break;
+    }
     case "NORMAL":
-      await deye.setGridCharge(false);
-      await deye.setSolarSell(false);
-      await deye.setWorkMode("ZERO_EXPORT_TO_LOAD");
+      await deye.setDynamicControl({
+        workMode: "ZERO_EXPORT_TO_LOAD",
+        solarSellAction: "off",
+        gridChargeAction: "off",
+        touAction: "off",
+        maxSellPower: 0,
+        timeUseSettingItems: await buildTouSlots(),
+      });
       break;
   }
 }

@@ -56,6 +56,14 @@ export interface EngineConfig {
   maxSocCharge: number;
 }
 
+export interface TradeConditions {
+  sellMinPrice: number;    // sprzedaj gdy cena >= X zl/kWh
+  sellMinSoc: number;      // sprzedaj gdy SOC >= X%
+  buyMaxPrice: number;     // kupuj gdy cena <= X zl/kWh
+  buyMaxSoc: number;       // kupuj gdy SOC <= X%
+  minSocFloor: number;     // nigdy nie schodz ponizej X%
+}
+
 // --- Override (Telegram / Dashboard) ---
 
 export interface Override {

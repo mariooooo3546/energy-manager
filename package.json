@@ -8,10 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest",
-    "server": "tsx server.ts"
+    "test:watch": "vitest"
   },
   "dependencies": {
+    "@vercel/kv": "^3.0.0",
     "next": "16.2.3",
     "node-cron": "^4.2.1",
     "node-telegram-bot-api": "^0.67.0",

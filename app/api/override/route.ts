@@ -3,23 +3,23 @@ import { setOverride, clearOverride, getOverride } from "@/src/lib/config";
 import { DecisionAction } from "@/src/lib/types";
 
 export async function GET() {
-  return NextResponse.json(getOverride());
+  return NextResponse.json(await getOverride());
 }
 
 export async function POST(req: Request) {
   const body = await req.json();
 
   if (body.action === "auto") {
-    clearOverride();
+    await clearOverride();
     return NextResponse.json({ status: "auto" });
   }
 
-  setOverride({
+  await setOverride({
     active: true,
     action: body.action as DecisionAction,
     targetSoc: body.targetSoc ?? null,
     setAt: new Date().toISOString(),
   });
 
-  return NextResponse.json(getOverride());
+  return NextResponse.json(await getOverride());
 }

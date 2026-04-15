@@ -1,22 +1,17 @@
 import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { DecisionLogger } from "../logger";
-import fs from "fs";
-import path from "path";
-
-const TEST_LOG_PATH = path.join(process.cwd(), "data", "test-decisions.json");
+import { getStore } from "../storage";
 
 describe("DecisionLogger", () => {
   let logger: DecisionLogger;
 
-  beforeEach(() => {
-    logger = new DecisionLogger(TEST_LOG_PATH);
+  beforeEach(async () => {
+    logger = new DecisionLogger();
+    // Clear decisions before each test
+    await getStore().set("decisions", []);
   });
 
-  afterEach(() => {
-    if (fs.existsSync(TEST_LOG_PATH)) fs.unlinkSync(TEST_LOG_PATH);
-  });
-
-  it("logs a decision and reads it back", () => {
+  it("logs a decision and reads it back", async () => {
     const decision = {
       timestamp: "2026-04-14T12:00:00Z",
       action: "CHARGE" as const,
@@ -27,15 +22,15 @@ describe("DecisionLogger", () => {
       thresholds: { lowPrice: 0.2, highPrice: 0.7 },
     };
 
-    logger.log(decision);
-    const history = logger.getHistory(10);
+    await logger.log(decision);
+    const history = await logger.getHistory(10);
     expect(history).toHaveLength(1);
     expect(history[0].action).toBe("CHARGE");
   });
 
-  it("returns most recent entries first", () => {
+  it("returns most recent entries", async () => {
     for (let i = 0; i < 5; i++) {
-      logger.log({
+      await logger.log({
         timestamp: `2026-04-14T${10 + i}:00:00Z`,
         action: "NORMAL",
         reason: `entry ${i}`,
@@ -46,8 +41,8 @@ describe("DecisionLogger", () => {
       });
     }
 
-    const history = logger.getHistory(3);
+    const history = await logger.getHistory(3);
     expect(history).toHaveLength(3);
-    expect(history[0].reason).toBe("entry 4");
+    expect(history[0].reason).toBe("entry 2");
   });
 });
