@@ -138,23 +138,24 @@ async function applyAction(
       await deye.setWorkMode("ZERO_EXPORT_TO_LOAD");
       break;
     case "SELL": {
-      console.log("[Apply] SELL: mode=SELLING_FIRST, solarSell=on, maxSellPower=" + maxPower);
-      // 1. Set selling mode first
+      console.log("[Apply] SELL: mode=SELLING_FIRST, solarSell=on");
+      // 1. Set selling mode
       await deye.setWorkMode("SELLING_FIRST");
       await delay(3000);
-      // 2. Enable solar sell (allows battery-to-grid export)
+      // 2. Enable solar sell (battery-to-grid export)
       await deye.setSolarSell(true);
       await delay(3000);
-      // 3. Set max sell power
-      await deye.setMaxSellPower(maxPower);
-      await delay(3000);
-      // 4. Disable grid charge
+      // 3. Disable grid charge
       await deye.setGridCharge(false);
       await delay(3000);
-      // 5. Configure TOU slots
-      const slots = await buildTouSlots();
-      if (slots.length > 0) {
-        await deye.updateTou("on", slots);
+      // 4. Configure TOU slots (non-critical, wrap in try/catch)
+      try {
+        const slots = await buildTouSlots();
+        if (slots.length > 0) {
+          await deye.updateTou("on", slots);
+        }
+      } catch (err) {
+        console.warn("[Apply] TOU update failed (non-critical):", err);
       }
       break;
     }
