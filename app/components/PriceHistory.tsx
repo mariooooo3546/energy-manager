@@ -101,9 +101,9 @@ export function PriceHistory() {
           <XAxis dataKey="hour" fontSize={11} />
           <YAxis fontSize={11} tickFormatter={(v) => `${v} zl`} />
           <Tooltip
-            formatter={(v: number, name: string) => [
-              `${v.toFixed(2)} zl/kWh`,
-              name,
+            formatter={(v, name) => [
+              `${Number(v ?? 0).toFixed(2)} zl/kWh`,
+              String(name ?? ""),
             ]}
           />
           <Legend />
