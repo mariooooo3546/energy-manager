@@ -126,24 +126,33 @@ async function applyAction(
   const maxPower = getMaxSellPower();
   const slots = await buildTouSlots();
 
+  // GBBOptimizer approach: use ZERO_EXPORT + TOU to control selling
+  // NOT "SELLING_FIRST" - that doesn't work with Deye TOU properly
   switch (action) {
     case "CHARGE":
-      console.log("[Apply] CHARGE via dynamicControl");
+      console.log("[Apply] CHARGE: gridCharge=on, TOU with enableGridCharge=true");
       await deye.setDynamicControl({
-        workMode: "ZERO_EXPORT_TO_LOAD",
-        solarSellAction: "off",
+        workMode: "ZERO_EXPORT_TO_CT",
+        solarSellAction: "on",
         gridChargeAction: "on",
-        touAction: "off",
-        maxSellPower: 0,
-        timeUseSettingItems: slots,
+        touAction: "on",
+        maxSellPower: maxPower,
+        maxSolarPower: 15000,
+        timeUseSettingItems: slots.map(s => ({
+          ...s,
+          enableGridCharge: true,
+          enableGeneration: false,
+          power: 0,
+          soc: 100,
+        })),
       });
       break;
     case "SELL":
-      console.log("[Apply] SELL via dynamicControl, all slots power=" + maxPower);
+      console.log("[Apply] SELL: ZERO_EXPORT_TO_CT + TOU enableGeneration=true, power=" + maxPower);
       await deye.setDynamicControl({
-        workMode: "SELLING_FIRST",
+        workMode: "ZERO_EXPORT_TO_CT",
         solarSellAction: "on",
-        gridChargeAction: "off",
+        gridChargeAction: "on",
         touAction: "on",
         maxSellPower: maxPower,
         maxSolarPower: 15000,
@@ -151,14 +160,21 @@ async function applyAction(
       });
       break;
     case "NORMAL":
-      console.log("[Apply] NORMAL via dynamicControl");
+      console.log("[Apply] NORMAL: ZERO_EXPORT_TO_CT, TOU off");
       await deye.setDynamicControl({
-        workMode: "ZERO_EXPORT_TO_LOAD",
-        solarSellAction: "off",
-        gridChargeAction: "off",
-        touAction: "off",
-        maxSellPower: 0,
-        timeUseSettingItems: slots,
+        workMode: "ZERO_EXPORT_TO_CT",
+        solarSellAction: "on",
+        gridChargeAction: "on",
+        touAction: "on",
+        maxSellPower: maxPower,
+        maxSolarPower: 15000,
+        timeUseSettingItems: slots.map(s => ({
+          ...s,
+          enableGeneration: false,
+          enableGridCharge: false,
+          power: 0,
+          soc: 100,
+        })),
       });
       break;
   }
