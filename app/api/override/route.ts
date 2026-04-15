@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { setOverride, clearOverride, getOverride } from "@/src/lib/config";
-import { DecisionAction } from "@/src/lib/types";
+
+const VALID_ACTIONS = ["CHARGE", "SELL", "NORMAL"] as const;
 
 export async function GET() {
   return NextResponse.json(await getOverride());
@@ -14,10 +15,21 @@ export async function POST(req: Request) {
     return NextResponse.json({ status: "auto" });
   }
 
+  if (!VALID_ACTIONS.includes(body.action)) {
+    return NextResponse.json(
+      { error: `Invalid action. Must be one of: ${VALID_ACTIONS.join(", ")}, auto` },
+      { status: 400 }
+    );
+  }
+
+  const targetSoc = body.targetSoc != null
+    ? Math.max(0, Math.min(100, Number(body.targetSoc)))
+    : null;
+
   await setOverride({
     active: true,
-    action: body.action as DecisionAction,
-    targetSoc: body.targetSoc ?? null,
+    action: body.action,
+    targetSoc,
     setAt: new Date().toISOString(),
   });
 

@@ -20,9 +20,10 @@ export default function Dashboard() {
 
   async function fetchAll() {
     try {
-      const safeFetch = async (url: string) => {
+      const safeFetch = async (url: string, opts?: RequestInit) => {
         try {
-          const r = await fetch(url);
+          const r = await fetch(url, opts);
+          if (r.status === 401) return { error: "Brak autoryzacji - ustaw API_SECRET" };
           if (!r.ok) return { error: `HTTP ${r.status}` };
           const text = await r.text();
           return text ? JSON.parse(text) : { error: "Empty response" };
