@@ -6,21 +6,17 @@ export interface KVStore {
   set<T>(key: string, value: T): Promise<void>;
 }
 
-// --- File-based store (local dev + Vercel fallback) ---
+// --- File-based store (local dev) ---
 
 class FileKVStore implements KVStore {
   private dir: string;
 
   constructor() {
-    // On Vercel, use /tmp (only writable directory)
-    // Locally, use data/ in project root
     const base = process.env.VERCEL ? "/tmp" : join(process.cwd(), "data");
     this.dir = base;
     try {
       if (!existsSync(this.dir)) mkdirSync(this.dir, { recursive: true });
-    } catch {
-      // Ignore mkdir errors
-    }
+    } catch {}
   }
 
   async get<T>(key: string): Promise<T | null> {
@@ -37,52 +33,45 @@ class FileKVStore implements KVStore {
     try {
       const path = join(this.dir, `${key}.json`);
       writeFileSync(path, JSON.stringify(value, null, 2));
-    } catch {
-      // Ignore write errors on read-only filesystem
-    }
+    } catch {}
   }
 }
 
-// --- Upstash Redis store (production on Vercel) ---
+// --- Redis store (Upstash via Vercel) ---
 
-class UpstashKVStore implements KVStore {
-  private url: string;
-  private token: string;
+class RedisKVStore implements KVStore {
+  private clientPromise: Promise<import("redis").RedisClientType> | null = null;
 
-  constructor() {
-    this.url = process.env.KV_REST_API_URL!;
-    this.token = process.env.KV_REST_API_TOKEN!;
+  private getClient() {
+    if (!this.clientPromise) {
+      this.clientPromise = (async () => {
+        const { createClient } = await import("redis");
+        const client = createClient({ url: process.env.REDIS_URL! });
+        await client.connect();
+        return client as import("redis").RedisClientType;
+      })();
+    }
+    return this.clientPromise;
   }
 
   async get<T>(key: string): Promise<T | null> {
     try {
-      const res = await fetch(`${this.url}/get/${key}`, {
-        headers: { Authorization: `Bearer ${this.token}` },
-      });
-      if (!res.ok) return null;
-      const data = await res.json();
-      if (data.result === null || data.result === undefined) return null;
-      // Upstash returns strings, parse JSON
-      return typeof data.result === "string"
-        ? JSON.parse(data.result)
-        : data.result;
-    } catch {
+      const client = await this.getClient();
+      const val = await client.get(key);
+      if (val === null) return null;
+      return JSON.parse(val) as T;
+    } catch (err) {
+      console.error("[Redis] get error:", err);
       return null;
     }
   }
 
   async set<T>(key: string, value: T): Promise<void> {
     try {
-      await fetch(`${this.url}/set/${key}`, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${this.token}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(JSON.stringify(value)),
-      });
-    } catch {
-      // Ignore errors
+      const client = await this.getClient();
+      await client.set(key, JSON.stringify(value));
+    } catch (err) {
+      console.error("[Redis] set error:", err);
     }
   }
 }
@@ -93,8 +82,8 @@ let store: KVStore | null = null;
 
 export function getStore(): KVStore {
   if (!store) {
-    store = process.env.KV_REST_API_URL
-      ? new UpstashKVStore()
+    store = process.env.REDIS_URL
+      ? new RedisKVStore()
       : new FileKVStore();
   }
   return store;
