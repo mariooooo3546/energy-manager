@@ -119,45 +119,52 @@ async function buildTouSlots(): Promise<TouTimeSlot[]> {
   return slots.slice(0, 6);
 }
 
+const delay = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
 async function applyAction(
   deye: DeyeCloudClient,
   action: DecisionAction
 ): Promise<void> {
   const maxPower = getMaxSellPower();
 
+  // Use individual commands (like gboptimizer) for reliable inverter control
   switch (action) {
     case "CHARGE":
-      await deye.setDynamicControl({
-        workMode: "ZERO_EXPORT_TO_LOAD",
-        solarSellAction: "off",
-        gridChargeAction: "on",
-        touAction: "off",
-        maxSellPower: 0,
-        timeUseSettingItems: await buildTouSlots(),
-      });
+      console.log("[Apply] CHARGE: gridCharge=on, solarSell=off, mode=ZERO_EXPORT_TO_LOAD");
+      await deye.setGridCharge(true);
+      await delay(3000);
+      await deye.setSolarSell(false);
+      await delay(3000);
+      await deye.setWorkMode("ZERO_EXPORT_TO_LOAD");
       break;
     case "SELL": {
+      console.log("[Apply] SELL: mode=SELLING_FIRST, solarSell=on, maxSellPower=" + maxPower);
+      // 1. Set selling mode first
+      await deye.setWorkMode("SELLING_FIRST");
+      await delay(3000);
+      // 2. Enable solar sell (allows battery-to-grid export)
+      await deye.setSolarSell(true);
+      await delay(3000);
+      // 3. Set max sell power
+      await deye.setMaxSellPower(maxPower);
+      await delay(3000);
+      // 4. Disable grid charge
+      await deye.setGridCharge(false);
+      await delay(3000);
+      // 5. Configure TOU slots
       const slots = await buildTouSlots();
-      await deye.setDynamicControl({
-        workMode: "SELLING_FIRST",
-        solarSellAction: "on",
-        gridChargeAction: "off",
-        touAction: "on",
-        maxSellPower: maxPower,
-        maxSolarPower: 15000,
-        timeUseSettingItems: slots,
-      });
+      if (slots.length > 0) {
+        await deye.updateTou("on", slots);
+      }
       break;
     }
     case "NORMAL":
-      await deye.setDynamicControl({
-        workMode: "ZERO_EXPORT_TO_LOAD",
-        solarSellAction: "off",
-        gridChargeAction: "off",
-        touAction: "off",
-        maxSellPower: 0,
-        timeUseSettingItems: await buildTouSlots(),
-      });
+      console.log("[Apply] NORMAL: solarSell=off, gridCharge=off, mode=ZERO_EXPORT_TO_LOAD");
+      await deye.setSolarSell(false);
+      await delay(3000);
+      await deye.setGridCharge(false);
+      await delay(3000);
+      await deye.setWorkMode("ZERO_EXPORT_TO_LOAD");
       break;
   }
 }
