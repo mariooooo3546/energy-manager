@@ -6,9 +6,18 @@ export function middleware(req: NextRequest) {
   // Only protect /api routes
   if (!pathname.startsWith("/api")) return NextResponse.next();
 
-  // Public routes (read-only, non-sensitive)
-  const publicRoutes = ["/api/status", "/api/prices", "/api/history"];
-  if (publicRoutes.some((r) => pathname.startsWith(r))) return NextResponse.next();
+  // Same-origin requests (from dashboard) - allow all
+  const referer = req.headers.get("referer");
+  const host = req.headers.get("host");
+  if (referer && host && new URL(referer).host === host) {
+    return NextResponse.next();
+  }
+
+  // Public read-only routes
+  const publicRoutes = ["/api/status", "/api/prices", "/api/history", "/api/conditions", "/api/schedule", "/api/profit"];
+  if (publicRoutes.some((r) => pathname.startsWith(r)) && req.method === "GET") {
+    return NextResponse.next();
+  }
 
   // Cron route - Vercel sends Authorization header
   if (pathname === "/api/cron") {
@@ -18,18 +27,17 @@ export function middleware(req: NextRequest) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  // Telegram webhook - has its own validation in route handler
+  // Telegram webhook - validated in route handler
   if (pathname.startsWith("/api/telegram")) return NextResponse.next();
 
-  // All other API routes require API_SECRET
+  // External requests to protected routes require API_SECRET
   const secret = process.env.API_SECRET;
-  if (!secret) return NextResponse.next(); // Dev mode - no auth
+  if (!secret) return NextResponse.next();
 
   const headerKey = req.headers.get("x-api-key");
   const queryKey = req.nextUrl.searchParams.get("key");
-  const cookieKey = req.cookies.get("api_key")?.value;
 
-  if (headerKey === secret || queryKey === secret || cookieKey === secret) {
+  if (headerKey === secret || queryKey === secret) {
     return NextResponse.next();
   }
 
