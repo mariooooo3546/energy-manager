@@ -189,6 +189,15 @@ export class DeyeCloudClient {
     });
   }
 
+  async setGenToGrid(on: boolean): Promise<void> {
+    await this.authenticate();
+    await this.request("/order/battery/modeControl", {
+      deviceSn: this.config.deviceSn,
+      batteryModeType: "GEN_TO_GRID",
+      action: on ? "on" : "off",
+    });
+  }
+
   async setSolarSell(on: boolean): Promise<void> {
     await this.authenticate();
     await this.request("/order/sys/solarSell/control", {

@@ -138,17 +138,24 @@ async function applyAction(
       await deye.setWorkMode("ZERO_EXPORT_TO_LOAD");
       break;
     case "SELL": {
-      console.log("[Apply] SELL: mode=SELLING_FIRST, solarSell=on");
+      console.log("[Apply] SELL: mode=SELLING_FIRST, solarSell=on, genToGrid=on");
       // 1. Set selling mode
       await deye.setWorkMode("SELLING_FIRST");
       await delay(3000);
-      // 2. Enable solar sell (battery-to-grid export)
+      // 2. Enable solar sell
       await deye.setSolarSell(true);
       await delay(3000);
-      // 3. Disable grid charge
+      // 3. Enable battery discharge to grid (Gen to Grid)
+      try {
+        await deye.setGenToGrid(true);
+        await delay(3000);
+      } catch (err) {
+        console.warn("[Apply] GenToGrid failed (trying alternative):", err);
+      }
+      // 4. Disable grid charge
       await deye.setGridCharge(false);
       await delay(3000);
-      // 4. Configure TOU slots (non-critical, wrap in try/catch)
+      // 5. Configure TOU slots
       try {
         const slots = await buildTouSlots();
         if (slots.length > 0) {
@@ -160,8 +167,10 @@ async function applyAction(
       break;
     }
     case "NORMAL":
-      console.log("[Apply] NORMAL: solarSell=off, gridCharge=off, mode=ZERO_EXPORT_TO_LOAD");
+      console.log("[Apply] NORMAL: solarSell=off, gridCharge=off, genToGrid=off, mode=ZERO_EXPORT_TO_LOAD");
       await deye.setSolarSell(false);
+      await delay(3000);
+      try { await deye.setGenToGrid(false); } catch {}
       await delay(3000);
       await deye.setGridCharge(false);
       await delay(3000);
