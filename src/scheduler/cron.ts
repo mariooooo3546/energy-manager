@@ -57,21 +57,27 @@ export async function runCycle(deps: SchedulerDeps): Promise<void> {
     return;
   }
 
-  // 3. Brak harmonogramu na tę godzinę → użyj warunków handlu
-  const prices = await pstryk.getTodayPrices();
-  const conditions = await getConditions();
-  const engine = new DecisionEngine(conditions);
-  const decision = engine.decide(prices.frames, currentHour, status.soc);
+  // 3. Brak harmonogramu na tę godzinę → ZERO_EXPORT_TO_LOAD (samokonsumpcja)
+  // Warunki cenowe wyłączone — sterujemy wyłącznie harmonogramem.
+  // const prices = await pstryk.getTodayPrices();
+  // const conditions = await getConditions();
+  // const engine = new DecisionEngine(conditions);
+  // const decision = engine.decide(prices.frames, currentHour, status.soc);
 
-  // 5. Apply
-  await applyAction(deye, decision.action, currentHour);
-
-  // 6. Log
-  await logger.log(decision);
-  console.log(`[Scheduler] ${decision.action}: ${decision.reason}`);
-
-  // 7. Notify
-  onDecision?.(decision.action, decision.reason, status.soc);
+  const action: DecisionAction = "NORMAL";
+  const reason = "Brak harmonogramu → ZERO_EXPORT_TO_LOAD (samokonsumpcja)";
+  console.log(`[Scheduler] ${reason}`);
+  await applyAction(deye, action, currentHour);
+  await logger.log({
+    timestamp: new Date().toISOString(),
+    action,
+    reason,
+    soc: status.soc,
+    buyPrice: 0,
+    sellPrice: 0,
+    thresholds: { lowPrice: 0, highPrice: 0 },
+  });
+  onDecision?.(action, reason, status.soc);
 }
 
 /**

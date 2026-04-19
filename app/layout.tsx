@@ -13,7 +13,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Energy Manager - Sterowanie falownikiem Deye",
+  title: "Cebula Energy Manager 🧅",
   description: "Automatyczne zarządzanie baterią i sprzedażą energii",
 };
 
