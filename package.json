@@ -9,8 +9,8 @@
     "lint": "eslint",
     "test": "vitest run",
     "test:watch": "vitest",
-    "agent:goe": "tsx -r dotenv/config scripts/goe-agent.ts",
-    "agent:ocpp": "tsx -r dotenv/config scripts/ocpp-server.ts"
+    "agent:goe": "DOTENV_CONFIG_PATH=.env.local tsx -r dotenv/config scripts/goe-agent.ts",
+    "agent:ocpp": "DOTENV_CONFIG_PATH=.env.local tsx -r dotenv/config scripts/ocpp-server.ts"
   },
   "dependencies": {
     "@vercel/kv": "^3.0.0",
