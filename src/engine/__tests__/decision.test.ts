@@ -1,12 +1,13 @@
 import { describe, it, expect } from "vitest";
 import { DecisionEngine } from "../decision";
-import { PstrykPriceFrame, EngineConfig } from "@/src/lib/types";
+import { PstrykPriceFrame, TradeConditions } from "@/src/lib/types";
 
-const config: EngineConfig = {
-  priceLowPercentile: 25,
-  priceHighPercentile: 75,
-  minSocSell: 20,
-  maxSocCharge: 90,
+const config: TradeConditions = {
+  sellMinPrice: 0.80,
+  sellMinSoc: 20,
+  buyMaxPrice: 0.30,
+  buyMaxSoc: 90,
+  minSocFloor: 10,
 };
 
 function makeFrames(prices: number[]): PstrykPriceFrame[] {

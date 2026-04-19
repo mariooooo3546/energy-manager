@@ -51,7 +51,7 @@ class RedisKVStore implements KVStore {
           socket: {
             reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
             connectTimeout: 10000,
-            keepAlive: 30000,
+            keepAlive: true,
           },
         });
         // Must attach error handler BEFORE connect, otherwise uncaught
