@@ -15,6 +15,8 @@ interface ForecastHour {
   hour: number;
   watts: number;
   wattHours: number;
+  wattsP10?: number;
+  wattsP90?: number;
 }
 
 interface ForecastDay {
@@ -26,6 +28,9 @@ interface ForecastDay {
 interface ForecastData {
   today: ForecastDay | null;
   tomorrow: ForecastDay | null;
+  source?: string;
+  fetchedAt?: string;
+  cached?: boolean;
 }
 
 export function PvForecast() {
@@ -122,7 +127,8 @@ export function PvForecast() {
       )}
 
       <p className="text-[10px] text-gray-300 mt-2 text-right">
-        forecast.solar | 10 kWp | azymut: południe
+        {data.source ?? "forecast.solar"} | 10 kWp | azymut: południe
+        {data.fetchedAt && ` | pobrano ${new Date(data.fetchedAt).toLocaleTimeString("pl-PL")}${data.cached ? " (cache)" : ""}`}
       </p>
     </div>
   );

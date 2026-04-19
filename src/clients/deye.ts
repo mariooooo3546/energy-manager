@@ -273,6 +273,28 @@ export class DeyeCloudClient {
     });
   }
 
+  async getWorkMode(): Promise<{
+    workMode: string | null;
+    solarSell: string | null;
+    gridCharge: string | null;
+    touEnabled: boolean | null;
+    maxSellPower: number | null;
+  }> {
+    await this.authenticate();
+    const res = await this.request("/config/workmode", {
+      deviceSn: this.config.deviceSn,
+    });
+    // Response shape varies across Deye firmware versions; surface what's there.
+    const data = res.data ?? res;
+    return {
+      workMode: data.workMode ?? data.sysWorkMode ?? null,
+      solarSell: data.solarSellAction ?? data.solarSell ?? null,
+      gridCharge: data.gridChargeAction ?? data.gridCharge ?? null,
+      touEnabled: data.touAction === "on" || data.touEnabled === true,
+      maxSellPower: data.maxSellPower ?? null,
+    };
+  }
+
   async readConfig(type: string): Promise<unknown> {
     await this.authenticate();
     return this.request(`/config/${type}`, {
