@@ -20,9 +20,9 @@ interface Props {
 }
 
 const MODE_LABELS: Record<string, { label: string; color: string; emoji: string }> = {
-  SELLING_FIRST: { label: "Sprzedaż do sieci", color: "bg-green-100 text-green-800", emoji: "💰" },
-  ZERO_EXPORT_TO_LOAD: { label: "Samozasilanie (Load)", color: "bg-blue-100 text-blue-800", emoji: "🏠" },
-  ZERO_EXPORT_TO_CT: { label: "Samozasilanie (CT)", color: "bg-blue-100 text-blue-800", emoji: "🏠" },
+  SELLING_FIRST: { label: "Selling First", color: "bg-green-100 text-green-800", emoji: "💰" },
+  ZERO_EXPORT_TO_LOAD: { label: "Zero Export To Load", color: "bg-blue-100 text-blue-800", emoji: "🏠" },
+  ZERO_EXPORT_TO_CT: { label: "Zero Export To CT", color: "bg-blue-100 text-blue-800", emoji: "🏠" },
 };
 
 function PowerFlow({ label, value, icon }: { label: string; value: number; icon: string }) {

@@ -2,7 +2,7 @@
  * Forecast.Solar API client
  * Free API: https://api.forecast.solar/estimate/:lat/:lon/:dec/:az/:kwp
  *
- * Default config for Niepła (38-213), 10 kWp, 35° tilt, south-facing
+ * Configure via env vars: PV_LAT, PV_LON, PV_POSTAL_CODE, PV_DEC, PV_AZ, PV_KWP
  */
 
 export interface PvForecastHour {
@@ -25,8 +25,6 @@ export interface PvForecastResponse {
 }
 
 const DEFAULT_CONFIG = {
-  lat: 49.78,     // Niepła approximate
-  lon: 21.47,     // Niepła approximate
   dec: 35,        // 35° tilt (typical Poland)
   az: 0,          // South-facing
   kwp: 10,        // 10 kWp
@@ -35,14 +33,21 @@ const DEFAULT_CONFIG = {
 export class ForecastSolarClient {
   private lat: number;
   private lon: number;
+  private postalCode: string | null;
   private dec: number;
   private az: number;
   private kwp: number;
 
-  constructor(config?: Partial<typeof DEFAULT_CONFIG>) {
+  constructor(config?: Partial<typeof DEFAULT_CONFIG> & { lat?: number; lon?: number; postalCode?: string }) {
     const c = { ...DEFAULT_CONFIG, ...config };
-    this.lat = parseFloat(process.env.PV_LAT || String(c.lat));
-    this.lon = parseFloat(process.env.PV_LON || String(c.lon));
+    const lat = process.env.PV_LAT ?? (config?.lat !== undefined ? String(config.lat) : undefined);
+    const lon = process.env.PV_LON ?? (config?.lon !== undefined ? String(config.lon) : undefined);
+    if (!lat || !lon) {
+      throw new Error("PV_LAT and PV_LON env vars are required (or pass lat/lon to constructor)");
+    }
+    this.lat = parseFloat(lat);
+    this.lon = parseFloat(lon);
+    this.postalCode = process.env.PV_POSTAL_CODE ?? config?.postalCode ?? null;
     this.dec = parseFloat(process.env.PV_DEC || String(c.dec));
     this.az = parseFloat(process.env.PV_AZ || String(c.az));
     this.kwp = parseFloat(process.env.PV_KWP || String(c.kwp));
