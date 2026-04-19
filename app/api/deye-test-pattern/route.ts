@@ -39,87 +39,48 @@ export async function GET() {
       }
     }
 
-    // Read BEFORE
-    try {
-      const res = await fetch(`${BASE_URL}/config/system`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `bearer ${token}`,
-        },
-        body: JSON.stringify({ deviceSn }),
-      });
-      results["BEFORE_config"] = await res.json();
-    } catch (err) {
-      results["BEFORE_config"] = { error: String(err) };
-    }
+    // Known working Modbus RTU frame: write register 178 (EnergyManagementMode) = 0x2AAA
+    // Format: slave(01) func(10) reg(00B2) qty(0001) bytes(02) value(2AAA) crc(229D)
+    const KNOWN_CMD = "011000B20001022AAA229D";
 
-    // 1. energyPattern via /order/sys/energyPattern/update — repeat
-    await tryCall("set_energyPattern_BATTERY_FIRST", "/order/sys/energyPattern/update", {
-      energyPattern: "BATTERY_FIRST",
-    });
+    // Try every plausible endpoint for "customized command" in Deye Cloud API
+    const endpoints = [
+      "/order/customized/command",
+      "/order/customized/cmd",
+      "/order/custom/command",
+      "/order/customCmd",
+      "/order/customCommand",
+      "/order/modbus/write",
+      "/order/modbus/custom",
+      "/order/sys/customized",
+      "/order/sys/customCmd",
+      "/device/control/customCmd",
+      "/device/customCmd",
+      "/command/custom",
+      "/order/command",
+      "/order/raw/modbus",
+      "/order/inverter/customCmd",
+    ];
 
-    // 2. Try with camelCase inside body but different param names
-    await tryCall("set_sysEnergyPattern", "/order/sys/energyPattern/update", {
-      sysEnergyPattern: "BATTERY_FIRST",
-    });
+    const bodyVariants = [
+      { key: "content", val: { content: KNOWN_CMD } },
+      { key: "command", val: { command: KNOWN_CMD } },
+      { key: "modbusCmd", val: { modbusCmd: KNOWN_CMD } },
+      { key: "cmd", val: { cmd: KNOWN_CMD } },
+      { key: "rawCmd", val: { rawCmd: KNOWN_CMD } },
+      { key: "data", val: { data: KNOWN_CMD } },
+    ];
 
-    // 3. Try boolean batteryFirst flag
-    await tryCall("set_batteryFirst_true", "/order/sys/energyPattern/update", {
-      batteryFirst: true,
-    });
-
-    // 4. Try workMode endpoint with energyPattern
-    await tryCall("workMode_with_ep", "/order/sys/workMode/update", {
-      workMode: "SELLING_FIRST",
-      energyPattern: "BATTERY_FIRST",
-    });
-
-    // 5. Try /order/config/system
-    await tryCall("order_config_system", "/order/config/system/update", {
-      energyPattern: "BATTERY_FIRST",
-      zeroExportPower: 8000,
-    });
-
-    // 6. Try zeroExportPower via power endpoint
-    await tryCall("power_zeroExport", "/order/sys/power/update", {
-      zeroExportPower: 8000,
-    });
-
-    // 7. Try combining both in power endpoint
-    await tryCall("power_both", "/order/sys/power/update", {
-      maxSellPower: 8000,
-      zeroExportPower: 8000,
-    });
-
-    // 8-14. GridSetpoint variants — GBBOptimizer uses this to FORCE export
-    await tryCall("gridSetpoint_v1", "/order/sys/gridSetpoint/update", { gridSetpoint: -8000 });
-    await tryCall("gridSetpoint_v2", "/order/sys/grid-setpoint/update", { gridSetpoint: -8000 });
-    await tryCall("gridSetpoint_v3", "/order/sys/gridPower/update", { gridSetpoint: -8000 });
-    await tryCall("gridSetpoint_v4", "/order/grid/setpoint/update", { gridSetpoint: -8000 });
-    await tryCall("gridSetpoint_v5", "/order/sys/powerControl/update", { gridSetpoint: -8000 });
-    await tryCall("gridSetpoint_v6", "/order/sys/exportPower/update", { exportPower: 8000 });
-    await tryCall("gridSetpoint_v7", "/order/battery/dischargePower/update", { power: 8000 });
-
-    // 15. Modbus-style register write
-    await tryCall("modbus_register", "/order/modbus/write", { register: 104, value: -8000 });
-
-    // Wait 5s for propagation
-    await new Promise((r) => setTimeout(r, 5000));
-
-    // Read AFTER
-    try {
-      const res = await fetch(`${BASE_URL}/config/system`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `bearer ${token}`,
-        },
-        body: JSON.stringify({ deviceSn }),
-      });
-      results["AFTER_config"] = await res.json();
-    } catch (err) {
-      results["AFTER_config"] = { error: String(err) };
+    for (const ep of endpoints) {
+      for (const bv of bodyVariants) {
+        const name = `${ep}__${bv.key}`;
+        await tryCall(name, ep, bv.val);
+        const r = results[name] as { status?: number };
+        // If any endpoint returns non-404, keep testing but log interesting
+        if (r?.status && r.status !== 404) {
+          results[`__HIT_${ep}_${bv.key}`] = r;
+        }
+      }
     }
 
     return NextResponse.json(results, { status: 200 });
