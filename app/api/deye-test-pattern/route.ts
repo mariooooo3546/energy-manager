@@ -39,30 +39,7 @@ export async function GET() {
       }
     }
 
-    // Energy pattern variants
-    await tryCall("energyPattern_v1", "/order/sys/energyPattern/update", { energyPattern: "BATTERY_FIRST" });
-    await tryCall("energyPattern_v2", "/order/sys/energy-pattern/update", { energyPattern: "BATTERY_FIRST" });
-    await tryCall("energyPattern_v3", "/order/sys/mode/update", { energyPattern: "BATTERY_FIRST" });
-
-    // Zero export power variants
-    await tryCall("zeroExport_v1", "/order/sys/zeroExportPower/update", { zeroExportPower: 8000 });
-    await tryCall("zeroExport_v2", "/order/sys/zero-export-power/update", { zeroExportPower: 8000 });
-    await tryCall("zeroExport_v3", "/order/sys/zeroExport/update", { zeroExportPower: 8000 });
-
-    // System config set (catch-all)
-    await tryCall("system_config", "/order/sys/system/update", {
-      energyPattern: "BATTERY_FIRST",
-      zeroExportPower: 8000,
-    });
-
-    // Workmode update with extra params
-    await tryCall("workMode_extended", "/order/sys/workMode/update", {
-      workMode: "SELLING_FIRST",
-      energyPattern: "BATTERY_FIRST",
-      zeroExportPower: 8000,
-    });
-
-    // Read current state
+    // Read BEFORE
     try {
       const res = await fetch(`${BASE_URL}/config/system`, {
         method: "POST",
@@ -72,9 +49,77 @@ export async function GET() {
         },
         body: JSON.stringify({ deviceSn }),
       });
-      results["currentSystemConfig"] = await res.json();
+      results["BEFORE_config"] = await res.json();
     } catch (err) {
-      results["currentSystemConfig"] = { error: String(err) };
+      results["BEFORE_config"] = { error: String(err) };
+    }
+
+    // 1. energyPattern via /order/sys/energyPattern/update — repeat
+    await tryCall("set_energyPattern_BATTERY_FIRST", "/order/sys/energyPattern/update", {
+      energyPattern: "BATTERY_FIRST",
+    });
+
+    // 2. Try with camelCase inside body but different param names
+    await tryCall("set_sysEnergyPattern", "/order/sys/energyPattern/update", {
+      sysEnergyPattern: "BATTERY_FIRST",
+    });
+
+    // 3. Try boolean batteryFirst flag
+    await tryCall("set_batteryFirst_true", "/order/sys/energyPattern/update", {
+      batteryFirst: true,
+    });
+
+    // 4. Try workMode endpoint with energyPattern
+    await tryCall("workMode_with_ep", "/order/sys/workMode/update", {
+      workMode: "SELLING_FIRST",
+      energyPattern: "BATTERY_FIRST",
+    });
+
+    // 5. Try /order/config/system
+    await tryCall("order_config_system", "/order/config/system/update", {
+      energyPattern: "BATTERY_FIRST",
+      zeroExportPower: 8000,
+    });
+
+    // 6. Try zeroExportPower via power endpoint
+    await tryCall("power_zeroExport", "/order/sys/power/update", {
+      zeroExportPower: 8000,
+    });
+
+    // 7. Try combining both in power endpoint
+    await tryCall("power_both", "/order/sys/power/update", {
+      maxSellPower: 8000,
+      zeroExportPower: 8000,
+    });
+
+    // 8-14. GridSetpoint variants — GBBOptimizer uses this to FORCE export
+    await tryCall("gridSetpoint_v1", "/order/sys/gridSetpoint/update", { gridSetpoint: -8000 });
+    await tryCall("gridSetpoint_v2", "/order/sys/grid-setpoint/update", { gridSetpoint: -8000 });
+    await tryCall("gridSetpoint_v3", "/order/sys/gridPower/update", { gridSetpoint: -8000 });
+    await tryCall("gridSetpoint_v4", "/order/grid/setpoint/update", { gridSetpoint: -8000 });
+    await tryCall("gridSetpoint_v5", "/order/sys/powerControl/update", { gridSetpoint: -8000 });
+    await tryCall("gridSetpoint_v6", "/order/sys/exportPower/update", { exportPower: 8000 });
+    await tryCall("gridSetpoint_v7", "/order/battery/dischargePower/update", { power: 8000 });
+
+    // 15. Modbus-style register write
+    await tryCall("modbus_register", "/order/modbus/write", { register: 104, value: -8000 });
+
+    // Wait 5s for propagation
+    await new Promise((r) => setTimeout(r, 5000));
+
+    // Read AFTER
+    try {
+      const res = await fetch(`${BASE_URL}/config/system`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `bearer ${token}`,
+        },
+        body: JSON.stringify({ deviceSn }),
+      });
+      results["AFTER_config"] = await res.json();
+    } catch (err) {
+      results["AFTER_config"] = { error: String(err) };
     }
 
     return NextResponse.json(results, { status: 200 });
