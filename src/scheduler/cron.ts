@@ -104,7 +104,9 @@ async function buildTouSlots(opts: { sellNow?: boolean; currentHour?: number } =
   for (const [h, soc] of [...activeMap.entries()].sort((a, b) => a[0] - b[0])) {
     slots.push({
       time: `${String(h).padStart(2, "0")}:00`,
-      power: maxPower,
+      // NEGATIVE power = force discharge to grid at this rate (GbbOptimizer v12.9 convention)
+      // Positive would be discharge "for own consumption"; negative forces export.
+      power: -maxPower,
       soc,
       enableGeneration: true,
       enableGridCharge: false,
