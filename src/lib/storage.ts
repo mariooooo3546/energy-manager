@@ -46,10 +46,26 @@ class RedisKVStore implements KVStore {
     if (!this.clientPromise) {
       this.clientPromise = (async () => {
         const { createClient } = await import("redis");
-        const client = createClient({ url: process.env.REDIS_URL! });
+        const client = createClient({
+          url: process.env.REDIS_URL!,
+          socket: {
+            reconnectStrategy: (retries) => Math.min(retries * 100, 3000),
+            connectTimeout: 10000,
+            keepAlive: 30000,
+          },
+        });
+        // Must attach error handler BEFORE connect, otherwise uncaught
+        // 'error' events (ETIMEDOUT, ECONNRESET) crash the Node process.
+        client.on("error", (err) => console.error("[Redis] error:", err?.message ?? err));
+        client.on("reconnecting", () => console.warn("[Redis] reconnecting..."));
+        client.on("ready", () => console.log("[Redis] ready"));
         await client.connect();
         return client as import("redis").RedisClientType;
       })();
+      // If connect itself fails, reset so next call retries from scratch.
+      this.clientPromise.catch(() => {
+        this.clientPromise = null;
+      });
     }
     return this.clientPromise;
   }
