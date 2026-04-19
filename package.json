@@ -8,13 +8,17 @@
     "start": "next start",
     "lint": "eslint",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "agent:goe": "tsx -r dotenv/config scripts/goe-agent.ts",
+    "agent:ocpp": "tsx -r dotenv/config scripts/ocpp-server.ts"
   },
   "dependencies": {
     "@vercel/kv": "^3.0.0",
+    "dotenv": "^17.4.2",
     "next": "16.2.3",
     "node-cron": "^4.2.1",
     "node-telegram-bot-api": "^0.67.0",
+    "ocpp-rpc": "^2.2.1",
     "react": "19.2.4",
     "react-dom": "19.2.4",
     "recharts": "^3.8.1",

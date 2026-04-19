@@ -1,24 +1,36 @@
 import { NextResponse } from "next/server";
-import { GoeClient } from "@/src/clients/goe";
+import { getStore } from "@/src/lib/storage";
+
+// Status is populated by the goe-agent background process (scripts/goe-agent.ts)
+// running on a LAN-connected machine. Vercel cannot reach the charger directly.
+const REDIS_KEY = "goe_status";
 
 export async function GET() {
-  const token = process.env.GOE_API_TOKEN;
-  if (!token) {
+  const store = getStore();
+  const status = await store.get<Record<string, unknown>>(REDIS_KEY);
+  const err = await store.get<{ error: string; erroredAt: string }>(
+    `${REDIS_KEY}_error`
+  );
+
+  if (!status) {
     return NextResponse.json(
-      { error: "GOE_API_TOKEN not set. Enable Cloud API in go-e app and add env var." },
+      {
+        error: "No go-e status in Redis. Is goe-agent running on LAN?",
+        lastAgentError: err,
+      },
       { status: 503 }
     );
   }
 
-  try {
-    const client = new GoeClient({
-      baseUrl: process.env.GOE_API_BASE,
-      token,
-      deviceId: process.env.GOE_DEVICE_ID,
-    });
-    const status = await client.getStatus();
-    return NextResponse.json(status);
-  } catch (err) {
-    return NextResponse.json({ error: String(err) }, { status: 500 });
-  }
+  const fetchedAt = status.fetchedAt as string | undefined;
+  const ageSec = fetchedAt
+    ? Math.round((Date.now() - new Date(fetchedAt).getTime()) / 1000)
+    : null;
+
+  return NextResponse.json({
+    ...status,
+    ageSec,
+    stale: ageSec !== null && ageSec > 120,
+    lastAgentError: err,
+  });
 }
