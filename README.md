@@ -2,7 +2,7 @@
 
 > **Inteligentne zarządzanie domowym magazynem energii** — automatyczna sprzedaż z baterii w godzinach drogich, magazynowanie w tanich, prognoza PV i pełna kontrola z przeglądarki i Telegrama.
 
-Aplikacja dla prosumentów z falownikiem **Deye** (hybrid, 8–12 kW), taryfą dynamiczną **Pstryk** i baterią LiFePO₄. Optymalizuje arbitraż energetyczny — kupuje, gdy prąd jest tani (lub ujemny), sprzedaje, gdy drogo. Bez klikania. 24/7.
+Aplikacja dla prosumentów z falownikiem **Deye** (hybrid), taryfą dynamiczną **Pstryk** i magazynem energii. Optymalizuje arbitraż energetyczny — kupuje, gdy prąd jest tani (lub ujemny), sprzedaje, gdy drogo. Bez klikania. 24/7.
 
 ![Dashboard](docs/images/dashboard.png)
 
