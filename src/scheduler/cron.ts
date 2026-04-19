@@ -21,12 +21,13 @@ export interface SchedulerDeps {
 
 export async function runCycle(deps: SchedulerDeps): Promise<void> {
   const { pstryk, deye, logger, onDecision } = deps;
+  const currentHour = new Date().getHours();
 
   // Check for manual override
   const override = await getOverride();
   if (override.active && override.action) {
     console.log(`[Scheduler] Override active: ${override.action}`);
-    await applyAction(deye, override.action);
+    await applyAction(deye, override.action, currentHour);
     return;
   }
 
@@ -34,7 +35,6 @@ export async function runCycle(deps: SchedulerDeps): Promise<void> {
   const status = await deye.getStatus();
 
   // 2. Check hourly schedule (NADRZĘDNY - ma priorytet nad warunkami)
-  const currentHour = new Date().getHours();
   const scheduledTarget = await getScheduleForHour(currentHour);
   if (scheduledTarget !== null) {
     // Harmonogram jest ustawiony na tę godzinę - warunki nie mają znaczenia
@@ -43,7 +43,7 @@ export async function runCycle(deps: SchedulerDeps): Promise<void> {
       ? `Harmonogram: SOC ${status.soc}% > cel ${scheduledTarget}% → sprzedaż`
       : `Harmonogram: SOC ${status.soc}% <= cel ${scheduledTarget}% → trzymaj`;
     console.log(`[Scheduler] ${reason}`);
-    await applyAction(deye, action);
+    await applyAction(deye, action, currentHour);
     await logger.log({
       timestamp: new Date().toISOString(),
       action,
@@ -64,7 +64,7 @@ export async function runCycle(deps: SchedulerDeps): Promise<void> {
   const decision = engine.decide(prices.frames, currentHour, status.soc);
 
   // 5. Apply
-  await applyAction(deye, decision.action);
+  await applyAction(deye, decision.action, currentHour);
 
   // 6. Log
   await logger.log(decision);
@@ -74,45 +74,48 @@ export async function runCycle(deps: SchedulerDeps): Promise<void> {
   onDecision?.(decision.action, decision.reason, status.soc);
 }
 
-async function buildTouSlots(): Promise<TouTimeSlot[]> {
+/**
+ * Build 6 TOU slots for Deye. Active hours (from schedule.json) become
+ * sell-slots (power=maxSell, soc=target). When sellNow=true we inject the
+ * current hour as a sell slot too — this covers engine-triggered SELLs
+ * outside the schedule.json peak hours. Remaining slots are "hold" slots
+ * (power=0, soc=100) that prevent battery→grid export.
+ */
+async function buildTouSlots(opts: { sellNow?: boolean; currentHour?: number } = {}): Promise<TouTimeSlot[]> {
   const schedule = await getSchedule();
   const maxPower = getMaxSellPower();
 
-  // Deye requires exactly 6 TOU time slots.
-  const activeSlots: TouTimeSlot[] = [];
-  for (let h = 0; h < 24; h++) {
-    const target = schedule[String(h)];
-    if (target !== undefined) {
-      activeSlots.push({
-        time: `${String(h).padStart(2, "0")}:00`,
-        power: maxPower,
-        soc: target,
-        enableGeneration: true,
-        enableGridCharge: false,
-      });
-    }
+  const activeMap = new Map<number, number>(); // hour → target SOC
+  for (const [h, target] of Object.entries(schedule)) {
+    activeMap.set(parseInt(h), target);
+  }
+  if (opts.sellNow && opts.currentHour !== undefined && !activeMap.has(opts.currentHour)) {
+    activeMap.set(opts.currentHour, 30); // default sell-down target
   }
 
-  const usedHours = new Set(Object.keys(schedule).map(Number));
-  const passiveHours = Array.from({ length: 24 }, (_, i) => i).filter(
-    (h) => !usedHours.has(h)
-  );
+  const slots: TouTimeSlot[] = [];
+  for (const [h, soc] of [...activeMap.entries()].sort((a, b) => a[0] - b[0])) {
+    slots.push({
+      time: `${String(h).padStart(2, "0")}:00`,
+      power: maxPower,
+      soc,
+      enableGeneration: true,
+      enableGridCharge: false,
+    });
+  }
 
-  const passiveSlot = (hour: number): TouTimeSlot => ({
-    time: `${String(hour).padStart(2, "0")}:00`,
-    power: maxPower,  // Allow export even in passive hours (TOU power=0 BLOCKS export!)
-    soc: 10,          // Low floor so battery can discharge
-    enableGeneration: true,
-    enableGridCharge: false,
-  });
-
-  const slots = [...activeSlots];
-  const needed = 6 - slots.length;
-  if (needed > 0) {
-    const step = Math.max(1, Math.floor(passiveHours.length / needed));
-    for (let i = 0; i < needed && i * step < passiveHours.length; i++) {
-      slots.push(passiveSlot(passiveHours[i * step]));
-    }
+  // Fill remaining slots with "hold" slots at evenly-spaced hours.
+  const passiveCandidates = [0, 4, 8, 12, 16, 20].filter((h) => !activeMap.has(h));
+  let idx = 0;
+  while (slots.length < 6 && idx < passiveCandidates.length) {
+    slots.push({
+      time: `${String(passiveCandidates[idx]).padStart(2, "0")}:00`,
+      power: 0,
+      soc: 100,
+      enableGeneration: true,
+      enableGridCharge: false,
+    });
+    idx++;
   }
 
   slots.sort((a, b) => a.time.localeCompare(b.time));
@@ -121,24 +124,39 @@ async function buildTouSlots(): Promise<TouTimeSlot[]> {
 
 async function applyAction(
   deye: DeyeCloudClient,
-  action: DecisionAction
+  action: DecisionAction,
+  currentHour: number
 ): Promise<void> {
   const maxPower = getMaxSellPower();
-  const slots = await buildTouSlots();
 
-  // GBBOptimizer approach: use ZERO_EXPORT + TOU to control selling
-  // NOT "SELLING_FIRST" - that doesn't work with Deye TOU properly
   switch (action) {
-    case "CHARGE":
-      console.log("[Apply] CHARGE: gridCharge=on, TOU with enableGridCharge=true");
+    case "SELL": {
+      // Peak-hour sell: switch to SELLING_FIRST + TOU slot for current hour.
+      const slots = await buildTouSlots({ sellNow: true, currentHour });
+      console.log(`[Apply] SELL: SELLING_FIRST + TOU (active hour ${currentHour})`);
       await deye.setDynamicControl({
-        workMode: "ZERO_EXPORT_TO_CT",
+        workMode: "SELLING_FIRST",
+        solarSellAction: "on",
+        gridChargeAction: "off",
+        touAction: "on",
+        maxSellPower: maxPower,
+        maxSolarPower: 15000,
+        timeUseSettingItems: slots,
+      });
+      break;
+    }
+    case "CHARGE": {
+      // Manual override for negative-price windows: charge battery from grid.
+      const slots = await buildTouSlots();
+      console.log("[Apply] CHARGE: SELLING_FIRST + gridCharge=on");
+      await deye.setDynamicControl({
+        workMode: "SELLING_FIRST",
         solarSellAction: "on",
         gridChargeAction: "on",
         touAction: "on",
         maxSellPower: maxPower,
         maxSolarPower: 15000,
-        timeUseSettingItems: slots.map(s => ({
+        timeUseSettingItems: slots.map((s) => ({
           ...s,
           enableGridCharge: true,
           enableGeneration: false,
@@ -147,35 +165,21 @@ async function applyAction(
         })),
       });
       break;
-    case "SELL":
-      console.log("[Apply] SELL: ZERO_EXPORT_TO_CT + TOU enableGeneration=true, power=" + maxPower);
+    }
+    case "NORMAL": {
+      // Self-consumption: battery covers load, PV surplus exports, no grid buy.
+      const slots = await buildTouSlots();
+      console.log("[Apply] NORMAL: ZERO_EXPORT_TO_LOAD + TOU off, solarSell on");
       await deye.setDynamicControl({
-        workMode: "ZERO_EXPORT_TO_CT",
+        workMode: "ZERO_EXPORT_TO_LOAD",
         solarSellAction: "on",
-        gridChargeAction: "on",
-        touAction: "on",
+        gridChargeAction: "off",
+        touAction: "off",
         maxSellPower: maxPower,
         maxSolarPower: 15000,
         timeUseSettingItems: slots,
       });
       break;
-    case "NORMAL":
-      console.log("[Apply] NORMAL: ZERO_EXPORT_TO_CT, TOU off");
-      await deye.setDynamicControl({
-        workMode: "ZERO_EXPORT_TO_CT",
-        solarSellAction: "on",
-        gridChargeAction: "on",
-        touAction: "on",
-        maxSellPower: maxPower,
-        maxSolarPower: 15000,
-        timeUseSettingItems: slots.map(s => ({
-          ...s,
-          enableGeneration: false,
-          enableGridCharge: false,
-          power: 0,
-          soc: 100,
-        })),
-      });
-      break;
+    }
   }
 }
