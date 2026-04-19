@@ -9,6 +9,7 @@ import { ProfitCard } from "./components/ProfitCard";
 import { ScheduleTable } from "./components/ScheduleTable";
 import { ConditionsCard } from "./components/ConditionsCard";
 import { PvForecast } from "./components/PvForecast";
+import { EvCard } from "./components/EvCard";
 
 export default function Dashboard() {
   const [status, setStatus] = useState<any>(null);
@@ -85,6 +86,7 @@ export default function Dashboard() {
       <div className="grid gap-6 max-w-5xl">
         {status && <StatusCard {...status} />}
         <ActionButtons override={status?.override ?? null} onActionComplete={fetchAll} />
+        <EvCard />
         {profit && <ProfitCard {...profit} />}
         {prices?.today && <PriceChart frames={prices.today} />}
         <PvForecast />
