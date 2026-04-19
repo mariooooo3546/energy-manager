@@ -22,65 +22,72 @@ export async function GET() {
 
     const results: Record<string, unknown> = {};
 
-    async function tryCall(name: string, path: string, body: object) {
+    async function tryCall(name: string, path: string, opts: {
+      method?: string;
+      body?: object;
+      query?: Record<string, string>;
+    }) {
       try {
-        const res = await fetch(`${BASE_URL}${path}`, {
-          method: "POST",
+        const q = opts.query ? "?" + new URLSearchParams(opts.query).toString() : "";
+        const init: RequestInit = {
+          method: opts.method ?? "POST",
           headers: {
             "Content-Type": "application/json",
             Authorization: `bearer ${token}`,
           },
-          body: JSON.stringify({ deviceSn, ...body }),
-        });
-        const json = await res.json();
-        results[name] = { status: res.status, ...json };
+        };
+        if (opts.body) init.body = JSON.stringify(opts.body);
+        const res = await fetch(`${BASE_URL}${path}${q}`, init);
+        const text = await res.text();
+        let json: unknown;
+        try { json = JSON.parse(text); } catch { json = { raw: text.slice(0, 200) }; }
+        results[name] = { status: res.status, ...(json as object) };
       } catch (err) {
         results[name] = { error: String(err) };
       }
     }
 
-    // Known working Modbus RTU frame: write register 178 (EnergyManagementMode) = 0x2AAA
-    // Format: slave(01) func(10) reg(00B2) qty(0001) bytes(02) value(2AAA) crc(229D)
     const KNOWN_CMD = "011000B20001022AAA229D";
 
-    // Try every plausible endpoint for "customized command" in Deye Cloud API
-    const endpoints = [
-      "/order/customized/command",
-      "/order/customized/cmd",
-      "/order/custom/command",
-      "/order/customCmd",
-      "/order/customCommand",
-      "/order/modbus/write",
-      "/order/modbus/custom",
-      "/order/sys/customized",
-      "/order/sys/customCmd",
-      "/device/control/customCmd",
-      "/device/customCmd",
-      "/command/custom",
-      "/order/command",
-      "/order/raw/modbus",
-      "/order/inverter/customCmd",
-    ];
+    // /order/customCmd exists but POST not supported. Try other methods + body keys + path variants.
+    const path = "/order/customCmd";
 
-    const bodyVariants = [
-      { key: "content", val: { content: KNOWN_CMD } },
-      { key: "command", val: { command: KNOWN_CMD } },
-      { key: "modbusCmd", val: { modbusCmd: KNOWN_CMD } },
-      { key: "cmd", val: { cmd: KNOWN_CMD } },
-      { key: "rawCmd", val: { rawCmd: KNOWN_CMD } },
-      { key: "data", val: { data: KNOWN_CMD } },
-    ];
+    await tryCall(`${path}__GET_query`, path, {
+      method: "GET",
+      query: { deviceSn, content: KNOWN_CMD },
+    });
+    await tryCall(`${path}__PUT_content`, path, {
+      method: "PUT",
+      body: { deviceSn, content: KNOWN_CMD },
+    });
+    await tryCall(`${path}__PATCH_content`, path, {
+      method: "PATCH",
+      body: { deviceSn, content: KNOWN_CMD },
+    });
+    await tryCall(`${path}__POST_body_wrap`, path, {
+      method: "POST",
+      body: { deviceSn, body: { content: KNOWN_CMD } },
+    });
 
-    for (const ep of endpoints) {
-      for (const bv of bodyVariants) {
-        const name = `${ep}__${bv.key}`;
-        await tryCall(name, ep, bv.val);
-        const r = results[name] as { status?: number };
-        // If any endpoint returns non-404, keep testing but log interesting
-        if (r?.status && r.status !== 404) {
-          results[`__HIT_${ep}_${bv.key}`] = r;
-        }
-      }
+    // /order/customCmd/send or /submit
+    for (const suffix of ["/send", "/submit", "/issue", "/execute"]) {
+      await tryCall(`${path}${suffix}__content`, `${path}${suffix}`, {
+        body: { deviceSn, content: KNOWN_CMD },
+      });
+    }
+
+    // Maybe it's /order/ORDER_TYPE/customCmd
+    for (const typ of ["sys", "device", "inverter"]) {
+      await tryCall(`/order/${typ}/customCmd__POST`, `/order/${typ}/customCmd`, {
+        body: { deviceSn, content: KNOWN_CMD },
+      });
+    }
+
+    // Completely different root
+    for (const root of ["/device", "/strategy", "/control", "/cmd"]) {
+      await tryCall(`${root}/customCmd__POST`, `${root}/customCmd`, {
+        body: { deviceSn, content: KNOWN_CMD },
+      });
     }
 
     return NextResponse.json(results, { status: 200 });
