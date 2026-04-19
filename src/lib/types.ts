@@ -72,3 +72,38 @@ export interface Override {
   targetSoc: number | null;
   setAt: string | null;
 }
+
+// --- EV (go-e Charger via OCPP) ---
+
+export type EvMode = "AUTO" | "ECO" | "CHEAP" | "FAST" | "STOP";
+
+export interface EvOverride {
+  mode: EvMode;
+  setAt: string;
+}
+
+export type EvActionType = "START" | "STOP" | "SET_CURRENT" | "HOLD";
+
+export interface EvAction {
+  action: EvActionType;
+  amps: number;            // requested amperage (0–16)
+  phases: 1 | 3;
+  reason: string;
+}
+
+export interface EvDecisionInput {
+  override: EvOverride;
+  gridPower: number;           // W, +import, -export (from inverter status)
+  soc: number;                 // battery SOC %
+  buyPrice: number;            // current zł/kWh
+  inSellSchedule: boolean;     // true = current hour has a sell-target
+  isCharging: boolean;         // true = OCPP says Charging now
+}
+
+export interface EvConfig {
+  maxAmps: number;             // hard limit (fuse / charger HW), default 16
+  surplusThresholdW: number;   // how much export before we start charging (default 1400 ≈ 6A×230V)
+  cheapPriceThreshold: number; // zł/kWh — below this, charge from grid in CHEAP/AUTO mode
+  minBatterySoc: number;       // % — below this, don't drain battery into EV
+  phaseSwitchThresholdW: number; // W — over this, switch to 3-phase (default 4200 = 3×6A×230V)
+}
