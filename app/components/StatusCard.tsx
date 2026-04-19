@@ -9,7 +9,21 @@ interface Props {
   buyPrice: number;
   sellPrice: number;
   override: { active: boolean; action: string | null };
+  workMode?: {
+    workMode: string | null;
+    energyPattern: string | null;
+    touEnabled: boolean | null;
+    maxSellPower: number | null;
+    maxSolarPower: number | null;
+    zeroExportPower: number | null;
+  } | null;
 }
+
+const MODE_LABELS: Record<string, { label: string; color: string; emoji: string }> = {
+  SELLING_FIRST: { label: "Sprzedaż do sieci", color: "bg-green-100 text-green-800", emoji: "💰" },
+  ZERO_EXPORT_TO_LOAD: { label: "Samozasilanie (Load)", color: "bg-blue-100 text-blue-800", emoji: "🏠" },
+  ZERO_EXPORT_TO_CT: { label: "Samozasilanie (CT)", color: "bg-blue-100 text-blue-800", emoji: "🏠" },
+};
 
 function PowerFlow({ label, value, icon }: { label: string; value: number; icon: string }) {
   const abs = Math.abs(value);
@@ -36,17 +50,41 @@ export function StatusCard(props: Props) {
 
   return (
     <div className="rounded-lg border p-6 bg-white shadow-sm">
-      <div className="flex justify-between items-center mb-4">
+      <div className="flex justify-between items-center mb-4 flex-wrap gap-2">
         <h2 className="text-lg font-semibold">Status falownika</h2>
-        <span
-          className={`px-3 py-1 rounded-full text-sm font-medium ${
-            props.override.active
-              ? "bg-orange-100 text-orange-800"
-              : "bg-green-100 text-green-800"
-          }`}
-        >
-          {modeLabel}
-        </span>
+        <div className="flex gap-2 items-center flex-wrap">
+          {props.workMode?.workMode && (() => {
+            const meta = MODE_LABELS[props.workMode.workMode] ?? {
+              label: props.workMode.workMode,
+              color: "bg-gray-100 text-gray-800",
+              emoji: "⚙️",
+            };
+            return (
+              <span className={`px-3 py-1 rounded-full text-sm font-medium ${meta.color}`}>
+                {meta.emoji} {meta.label}
+              </span>
+            );
+          })()}
+          {props.workMode?.touEnabled && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+              TOU
+            </span>
+          )}
+          {props.workMode?.energyPattern && (
+            <span className="px-2 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700" title="Energy Pattern">
+              {props.workMode.energyPattern === "LOAD_FIRST" ? "Load First" : props.workMode.energyPattern === "BATTERY_FIRST" ? "Battery First" : props.workMode.energyPattern}
+            </span>
+          )}
+          <span
+            className={`px-3 py-1 rounded-full text-sm font-medium ${
+              props.override.active
+                ? "bg-orange-100 text-orange-800"
+                : "bg-gray-100 text-gray-700"
+            }`}
+          >
+            {modeLabel}
+          </span>
+        </div>
       </div>
 
       {/* Battery SOC bar */}

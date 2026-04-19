@@ -275,23 +275,25 @@ export class DeyeCloudClient {
 
   async getWorkMode(): Promise<{
     workMode: string | null;
-    solarSell: string | null;
-    gridCharge: string | null;
+    energyPattern: string | null;
     touEnabled: boolean | null;
     maxSellPower: number | null;
+    maxSolarPower: number | null;
+    zeroExportPower: number | null;
   }> {
     await this.authenticate();
-    const res = await this.request("/config/workmode", {
-      deviceSn: this.config.deviceSn,
-    });
-    // Response shape varies across Deye firmware versions; surface what's there.
-    const data = res.data ?? res;
+    // Deye splits this across two endpoints. Parallel fetch to minimize latency.
+    const [sys, tou] = await Promise.all([
+      this.request("/config/system", { deviceSn: this.config.deviceSn }).catch(() => null),
+      this.request("/config/tou", { deviceSn: this.config.deviceSn }).catch(() => null),
+    ]);
     return {
-      workMode: data.workMode ?? data.sysWorkMode ?? null,
-      solarSell: data.solarSellAction ?? data.solarSell ?? null,
-      gridCharge: data.gridChargeAction ?? data.gridCharge ?? null,
-      touEnabled: data.touAction === "on" || data.touEnabled === true,
-      maxSellPower: data.maxSellPower ?? null,
+      workMode: sys?.systemWorkMode ?? null,
+      energyPattern: sys?.energyPattern ?? null,
+      touEnabled: tou?.touAction === "on",
+      maxSellPower: sys?.maxSellPower ?? null,
+      maxSolarPower: sys?.maxSolarPower ?? null,
+      zeroExportPower: sys?.zeroExportPower ?? null,
     };
   }
 

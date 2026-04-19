@@ -14,10 +14,14 @@ export async function GET() {
     });
     const pstryk = new PstrykClient(process.env.PSTRYK_API_KEY!);
 
-    const [status, prices, override] = await Promise.all([
+    const [status, prices, override, workMode] = await Promise.all([
       deye.getStatus(),
       pstryk.getTodayPrices(),
       getOverride(),
+      deye.getWorkMode().catch((err) => {
+        console.warn("[status] getWorkMode failed:", err);
+        return null;
+      }),
     ]);
 
     const hour = new Date().getHours();
@@ -32,6 +36,7 @@ export async function GET() {
       buyPrice: currentFrame?.metrics.pricing.price_gross,
       sellPrice: currentFrame?.metrics.pricing.price_prosumer_gross,
       override,
+      workMode,
     });
   } catch (err) {
     return NextResponse.json({ error: String(err) }, { status: 500 });

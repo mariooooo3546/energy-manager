@@ -2,8 +2,9 @@
 
 import { useEffect, useState } from "react";
 import {
-  BarChart,
+  ComposedChart,
   Bar,
+  Line,
   XAxis,
   YAxis,
   Tooltip,
@@ -22,6 +23,8 @@ interface ForecastHour {
 interface ForecastDay {
   date: string;
   totalKwh: number;
+  totalKwhP10?: number;
+  totalKwhP90?: number;
   hours: ForecastHour[];
 }
 
@@ -70,21 +73,25 @@ export function PvForecast() {
   const chartData = [];
   const todayHours = data.today?.hours ?? [];
   const tomorrowHours = data.tomorrow?.hours ?? [];
+  // Show tomorrow when today is mostly in the past (fewer than 4h left).
+  const showDay = tomorrowHours.length > todayHours.length ? "tomorrow" : "today";
+  const sourceHours = showDay === "tomorrow" ? tomorrowHours : todayHours;
+  const dayColor = showDay === "tomorrow" ? "#f97316" : "#eab308";
 
-  // Merge into single dataset
   for (let h = 0; h < 24; h++) {
-    const t = todayHours.find((x) => x.hour === h);
-    const tm = tomorrowHours.find((x) => x.hour === h);
-    if (t || tm) {
-      chartData.push({
-        hour: `${String(h).padStart(2, "0")}:00`,
-        dzis: t ? Math.round(t.watts) : 0,
-        jutro: tm ? Math.round(tm.watts) : 0,
-      });
-    }
+    const hr = sourceHours.find((x) => x.hour === h);
+    chartData.push({
+      hour: `${String(h).padStart(2, "0")}:00`,
+      watts: hr ? Math.round(hr.watts) : 0,
+      p10: hr?.wattsP10 ? Math.round(hr.wattsP10) : 0,
+      p90: hr?.wattsP90 ? Math.round(hr.wattsP90) : 0,
+    });
   }
 
-  const currentHour = new Date().getHours();
+  const todayP10 = data.today?.totalKwhP10 ?? null;
+  const todayP90 = data.today?.totalKwhP90 ?? null;
+  const tomorrowP10 = data.tomorrow?.totalKwhP10 ?? null;
+  const tomorrowP90 = data.tomorrow?.totalKwhP90 ?? null;
 
   return (
     <div className="rounded-lg border p-6 bg-white shadow-sm">
@@ -92,34 +99,53 @@ export function PvForecast() {
         <h2 className="text-lg font-semibold">☀️ Prognoza PV</h2>
         <div className="flex gap-4 text-sm">
           {data.today && (
-            <span className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded">
-              Dziś: <strong>{data.today.totalKwh} kWh</strong>
+            <span className="bg-yellow-50 text-yellow-700 px-2 py-1 rounded" title={`P10 – P90: ${todayP10} – ${todayP90} kWh`}>
+              Dziś: <strong>{data.today.totalKwh}</strong>
+              <span className="text-[10px] text-yellow-600 ml-1">({todayP10}–{todayP90})</span> kWh
             </span>
           )}
           {data.tomorrow && (
-            <span className="bg-orange-50 text-orange-700 px-2 py-1 rounded">
-              Jutro: <strong>{data.tomorrow.totalKwh} kWh</strong>
+            <span className="bg-orange-50 text-orange-700 px-2 py-1 rounded" title={`P10 – P90: ${tomorrowP10} – ${tomorrowP90} kWh`}>
+              Jutro: <strong>{data.tomorrow.totalKwh}</strong>
+              <span className="text-[10px] text-orange-600 ml-1">({tomorrowP10}–{tomorrowP90})</span> kWh
             </span>
           )}
         </div>
       </div>
 
       {chartData.length > 0 ? (
-        <ResponsiveContainer width="100%" height={200}>
-          <BarChart data={chartData}>
-            <XAxis dataKey="hour" fontSize={10} />
-            <YAxis fontSize={10} tickFormatter={(v) => `${v}W`} />
-            <Tooltip
-              formatter={(v, name) => [
-                `${Number(v ?? 0)} W`,
-                String(name ?? ""),
-              ]}
-            />
-            <Legend />
-            <Bar dataKey="dzis" fill="#eab308" name="Dziś" />
-            <Bar dataKey="jutro" fill="#f97316" name="Jutro" />
-          </BarChart>
-        </ResponsiveContainer>
+        <>
+          <div className="text-xs text-gray-500 mb-1">
+            {showDay === "tomorrow" ? "Jutro" : "Dziś"} — prognoza godzinowa (P50 słupki, widełki P10–P90)
+          </div>
+          <ResponsiveContainer width="100%" height={200}>
+            <ComposedChart data={chartData}>
+              <XAxis dataKey="hour" fontSize={10} />
+              <YAxis fontSize={10} tickFormatter={(v) => `${v}W`} />
+              <Tooltip
+                formatter={(v, name) => [`${Number(v ?? 0)} W`, String(name ?? "")]}
+              />
+              <Legend />
+              <Bar dataKey="watts" fill={dayColor} name="P50 (najbardziej prawdopodobne)" />
+              <Line
+                dataKey="p10"
+                stroke="#9ca3af"
+                strokeDasharray="3 3"
+                dot={false}
+                name="P10 (pesymistycznie)"
+                strokeWidth={1.5}
+              />
+              <Line
+                dataKey="p90"
+                stroke="#6b7280"
+                strokeDasharray="3 3"
+                dot={false}
+                name="P90 (optymistycznie)"
+                strokeWidth={1.5}
+              />
+            </ComposedChart>
+          </ResponsiveContainer>
+        </>
       ) : (
         <p className="text-gray-400 text-sm text-center py-4">
           Brak danych prognozy

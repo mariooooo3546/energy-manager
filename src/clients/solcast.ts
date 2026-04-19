@@ -28,6 +28,8 @@ export interface PvForecastDay {
   date: string;     // YYYY-MM-DD (Europe/Warsaw)
   totalWh: number;
   totalKwh: number;
+  totalKwhP10: number;
+  totalKwhP90: number;
   hours: PvForecastHour[];
 }
 
@@ -150,11 +152,14 @@ export class SolcastClient {
       wattsP10: number[];
       wattsP90: number[];
       wh: number;
+      whP10: number;
+      whP90: number;
     }
     const byDayHour = new Map<string, Map<number, Bucket>>();
 
     for (const f of raws) {
       const periodMin = parsePeriodMinutes(f.period);
+      const hourFraction = periodMin / 60;
       // period_end is the END of the window; treat as the hour it falls into.
       const endDate = new Date(f.period_end);
       const { date, hour } = warsawDate(endDate);
@@ -163,19 +168,24 @@ export class SolcastClient {
       if (!byDayHour.has(date)) byDayHour.set(date, new Map());
       const hourMap = byDayHour.get(date)!;
       if (!hourMap.has(hour)) {
-        hourMap.set(hour, { watts: [], wattsP10: [], wattsP90: [], wh: 0 });
+        hourMap.set(hour, { watts: [], wattsP10: [], wattsP90: [], wh: 0, whP10: 0, whP90: 0 });
       }
       const bucket = hourMap.get(hour)!;
       bucket.watts.push(f.pv_estimate * 1000);
       bucket.wattsP10.push(f.pv_estimate10 * 1000);
       bucket.wattsP90.push(f.pv_estimate90 * 1000);
-      bucket.wh += f.pv_estimate * 1000 * (periodMin / 60);
+      bucket.wh += f.pv_estimate * 1000 * hourFraction;
+      bucket.whP10 += f.pv_estimate10 * 1000 * hourFraction;
+      bucket.whP90 += f.pv_estimate90 * 1000 * hourFraction;
     }
 
     const buildDay = (key: string): PvForecastDay | null => {
       const hourMap = byDayHour.get(key);
       if (!hourMap || hourMap.size === 0) return null;
       const hours: PvForecastHour[] = [];
+      let totalWh = 0;
+      let totalWhP10 = 0;
+      let totalWhP90 = 0;
       for (const [h, b] of [...hourMap.entries()].sort((a, b) => a[0] - b[0])) {
         const avg = (arr: number[]) => Math.round(arr.reduce((s, v) => s + v, 0) / arr.length);
         hours.push({
@@ -186,12 +196,16 @@ export class SolcastClient {
           wattsP10: avg(b.wattsP10),
           wattsP90: avg(b.wattsP90),
         });
+        totalWh += b.wh;
+        totalWhP10 += b.whP10;
+        totalWhP90 += b.whP90;
       }
-      const totalWh = hours.reduce((s, h) => s + h.wattHours, 0);
       return {
         date: key,
-        totalWh,
+        totalWh: Math.round(totalWh),
         totalKwh: Math.round(totalWh / 10) / 100,
+        totalKwhP10: Math.round(totalWhP10 / 10) / 100,
+        totalKwhP90: Math.round(totalWhP90 / 10) / 100,
         hours,
       };
     };
