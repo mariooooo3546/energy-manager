@@ -11,6 +11,7 @@ import {
 } from "@/src/lib/config";
 import { DecisionAction } from "@/src/lib/types";
 import { TouTimeSlot } from "@/src/clients/deye";
+import { getLocalHour } from "@/src/lib/time";
 
 export interface SchedulerDeps {
   pstryk: PstrykClient;
@@ -21,7 +22,7 @@ export interface SchedulerDeps {
 
 export async function runCycle(deps: SchedulerDeps): Promise<void> {
   const { pstryk, deye, logger, onDecision } = deps;
-  const currentHour = new Date().getHours();
+  const currentHour = getLocalHour();
 
   // Check for manual override
   const override = await getOverride();

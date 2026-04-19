@@ -3,6 +3,7 @@ import { PstrykClient } from "@/src/clients/pstryk";
 import { DeyeCloudClient } from "@/src/clients/deye";
 import { DecisionLogger } from "@/src/lib/logger";
 import { setOverride, clearOverride } from "@/src/lib/config";
+import { getLocalHour } from "@/src/lib/time";
 
 interface BotDeps {
   pstryk: PstrykClient;
@@ -25,7 +26,7 @@ export function createBot(deps: BotDeps): TelegramBot {
     try {
       const status = await deps.deye.getStatus();
       const prices = await deps.pstryk.getTodayPrices();
-      const hour = new Date().getHours();
+      const hour = getLocalHour();
       const frame = prices.frames[hour];
 
       await bot.sendMessage(

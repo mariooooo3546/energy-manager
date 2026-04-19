@@ -2,6 +2,7 @@ import { PstrykClient } from "@/src/clients/pstryk";
 import { DeyeCloudClient } from "@/src/clients/deye";
 import { DecisionLogger } from "@/src/lib/logger";
 import { setOverride, clearOverride } from "@/src/lib/config";
+import { getLocalHour } from "@/src/lib/time";
 import { sendTelegramMessage } from "./notify";
 
 interface CommandDeps {
@@ -60,7 +61,7 @@ async function handleStatus(): Promise<void> {
     deps.deye.getStatus(),
     deps.pstryk.getTodayPrices(),
   ]);
-  const hour = new Date().getHours();
+  const hour = getLocalHour();
   const frame = prices.frames[hour];
 
   await sendTelegramMessage(

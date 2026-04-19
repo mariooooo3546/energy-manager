@@ -2,6 +2,7 @@ import { NextResponse } from "next/server";
 import { DeyeCloudClient } from "@/src/clients/deye";
 import { PstrykClient } from "@/src/clients/pstryk";
 import { getOverride } from "@/src/lib/config";
+import { getLocalHour } from "@/src/lib/time";
 
 export async function GET() {
   try {
@@ -24,7 +25,7 @@ export async function GET() {
       }),
     ]);
 
-    const hour = new Date().getHours();
+    const hour = getLocalHour();
     const currentFrame = prices.frames[hour];
 
     return NextResponse.json({
