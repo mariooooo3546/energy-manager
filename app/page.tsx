@@ -8,7 +8,6 @@ import { DecisionLog } from "./components/DecisionLog";
 import { ProfitCard } from "./components/ProfitCard";
 import { ScheduleTable } from "./components/ScheduleTable";
 import { ConditionsCard } from "./components/ConditionsCard";
-import { PriceHistory } from "./components/PriceHistory";
 import { PvForecast } from "./components/PvForecast";
 
 export default function Dashboard() {
@@ -89,9 +88,8 @@ export default function Dashboard() {
         {profit && <ProfitCard {...profit} />}
         {prices?.today && <PriceChart frames={prices.today} />}
         <PvForecast />
-        <PriceHistory />
-        <ConditionsCard />
         <ScheduleTable />
+        <ConditionsCard />
         <DecisionLog decisions={history} />
       </div>
     </main>
