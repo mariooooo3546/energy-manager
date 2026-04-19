@@ -27,8 +27,6 @@ export interface DynamicControlParams {
   touDays?: string[];
   maxSellPower: number;
   maxSolarPower?: number;
-  energyPattern?: "BATTERY_FIRST" | "LOAD_FIRST";
-  zeroExportPower?: number;
   timeUseSettingItems: TouTimeSlot[];
 }
 
@@ -233,12 +231,6 @@ export class DeyeCloudClient {
     if (params.maxSolarPower !== undefined) {
       body.maxSolarPower = params.maxSolarPower;
     }
-    if (params.energyPattern !== undefined) {
-      body.energyPattern = params.energyPattern;
-    }
-    if (params.zeroExportPower !== undefined) {
-      body.zeroExportPower = params.zeroExportPower;
-    }
     console.log("[Deye] dynamicControl request:", JSON.stringify(body, null, 2));
     await this.request("/strategy/dynamicControl", body);
   }
@@ -248,6 +240,14 @@ export class DeyeCloudClient {
     await this.request("/order/sys/energyPattern/update", {
       deviceSn: this.config.deviceSn,
       energyPattern: pattern,
+    });
+  }
+
+  async setZeroExportPower(watts: number): Promise<void> {
+    await this.authenticate();
+    await this.request("/order/sys/zeroExportPower/update", {
+      deviceSn: this.config.deviceSn,
+      zeroExportPower: watts,
     });
   }
 

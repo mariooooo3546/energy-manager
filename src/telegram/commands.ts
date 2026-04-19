@@ -1,8 +1,10 @@
 import { PstrykClient } from "@/src/clients/pstryk";
 import { DeyeCloudClient } from "@/src/clients/deye";
 import { DecisionLogger } from "@/src/lib/logger";
-import { setOverride, clearOverride } from "@/src/lib/config";
+import { SolcastClient } from "@/src/clients/solcast";
+import { setOverride, clearOverride, getSchedule } from "@/src/lib/config";
 import { getLocalHour } from "@/src/lib/time";
+import { runCycle } from "@/src/scheduler/cron";
 import { sendTelegramMessage } from "./notify";
 
 interface CommandDeps {
@@ -47,12 +49,44 @@ export async function handleCommand(text: string): Promise<void> {
         return await handleProfit();
       case "/log":
         return await handleLog();
+      case "/prognoza":
+        return await handleForecast();
+      case "/harmonogram":
+        return await handleSchedule();
+      case "/cykl":
+        return await handleRunCycle();
+      case "/reset":
+        return await handleReset();
+      case "/help":
+      case "/pomoc":
+      case "/start":
+        return await handleHelp();
       default:
-        await sendTelegramMessage("Dostępne komendy: /status /ceny /laduj /sprzedaj /rozladuj /auto /zysk /log");
+        return await handleHelp();
     }
   } catch (err) {
     await sendTelegramMessage(`❌ Błąd: ${err}`);
   }
+}
+
+async function handleHelp(): Promise<void> {
+  await sendTelegramMessage(
+    "🧅 *Cebula Energy Manager* — komendy:\n\n" +
+    "📊 *Status i dane*\n" +
+    "/status — SOC, moc, aktualne ceny\n" +
+    "/ceny — ceny Pstryk na dziś (24h)\n" +
+    "/prognoza — prognoza PV na dziś + jutro\n" +
+    "/harmonogram — pokaż godziny sprzedaży\n" +
+    "/zysk — dzienny bilans PLN\n" +
+    "/log — ostatnie 5 decyzji\n\n" +
+    "⚡ *Sterowanie*\n" +
+    "/sprzedaj — SELLING_FIRST (sprzedaj wszystko powyżej min SOC)\n" +
+    "/rozladuj [SOC] — sprzedaj do celu (domyślnie 40%)\n" +
+    "/laduj [SOC] — ładuj z sieci do celu (domyślnie 90%)\n" +
+    "/auto — wróć do harmonogramu\n" +
+    "/cykl — wymuś natychmiastową decyzję schedulera\n" +
+    "/reset — bezpieczny tryb (ZERO_EXPORT_TO_LOAD, TOU off)"
+  );
 }
 
 async function handleStatus(): Promise<void> {
@@ -164,4 +198,65 @@ async function handleLog(): Promise<void> {
     return `${time} ${d.action} SOC:${d.soc}% ${d.buyPrice.toFixed(2)}zł`;
   });
   await sendTelegramMessage(lines.join("\n"));
+}
+
+async function handleForecast(): Promise<void> {
+  if (!process.env.SOLCAST_API_KEY || !process.env.SOLCAST_SITE_ID) {
+    await sendTelegramMessage("Prognoza niedostępna (brak SOLCAST_API_KEY).");
+    return;
+  }
+  const client = new SolcastClient();
+  const forecast = await client.getForecast();
+  const fmt = (d: typeof forecast.today) => {
+    if (!d) return "brak danych";
+    return `${d.totalKwh} kWh (P10 ${d.totalKwhP10} / P90 ${d.totalKwhP90})`;
+  };
+  await sendTelegramMessage(
+    `☀️ Prognoza PV (Solcast)\n` +
+    `Dziś: ${fmt(forecast.today)}\n` +
+    `Jutro: ${fmt(forecast.tomorrow)}`
+  );
+}
+
+async function handleSchedule(): Promise<void> {
+  const schedule = await getSchedule();
+  const entries = Object.entries(schedule).sort((a, b) => parseInt(a[0]) - parseInt(b[0]));
+  if (entries.length === 0) {
+    await sendTelegramMessage("📅 Harmonogram pusty — wszędzie samokonsumpcja.");
+    return;
+  }
+  const lines = entries.map(([h, soc]) => `${h.padStart(2, "0")}:00 → cel ${soc}%`);
+  await sendTelegramMessage(`📅 Harmonogram sprzedaży:\n${lines.join("\n")}`);
+}
+
+async function handleRunCycle(): Promise<void> {
+  const deps = createDeps();
+  await sendTelegramMessage("🔄 Odpalam cykl schedulera...");
+  await runCycle({
+    pstryk: deps.pstryk,
+    deye: deps.deye,
+    logger: deps.logger,
+  });
+  await sendTelegramMessage("✅ Cykl wykonany. Sprawdź /status.");
+}
+
+async function handleReset(): Promise<void> {
+  const deps = createDeps();
+  await clearOverride();
+  await deps.deye.setDynamicControl({
+    workMode: "ZERO_EXPORT_TO_LOAD",
+    solarSellAction: "off",
+    gridChargeAction: "off",
+    touAction: "off",
+    maxSellPower: 0,
+    maxSolarPower: 15000,
+    timeUseSettingItems: [
+      { time: "00:00", power: 0, soc: 100, enableGeneration: false, enableGridCharge: false },
+    ],
+  });
+  await Promise.allSettled([
+    deps.deye.setEnergyPattern("LOAD_FIRST"),
+    deps.deye.setZeroExportPower(20),
+  ]);
+  await sendTelegramMessage("🛡️ Reset: ZERO_EXPORT_TO_LOAD, TOU off, override off.");
 }

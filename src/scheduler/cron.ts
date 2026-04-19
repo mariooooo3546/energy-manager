@@ -139,9 +139,8 @@ async function applyAction(
   switch (action) {
     case "SELL": {
       // Peak-hour sell: switch to SELLING_FIRST + TOU slot for current hour.
-      // Must also set energyPattern=BATTERY_FIRST and raise zeroExportPower,
-      // otherwise residual LOAD_FIRST + zeroExportPower=20 from ZERO_EXPORT
-      // mode caps battery export to load-only (~0W to grid).
+      // energyPattern + zeroExportPower are set via separate endpoints
+      // (dynamicControl rejects them as "invalid param type").
       const slots = await buildTouSlots({ sellNow: true, currentHour });
       console.log(`[Apply] SELL: SELLING_FIRST + TOU (active hour ${currentHour})`);
       await deye.setDynamicControl({
@@ -151,10 +150,12 @@ async function applyAction(
         touAction: "on",
         maxSellPower: maxPower,
         maxSolarPower: 15000,
-        energyPattern: "BATTERY_FIRST",
-        zeroExportPower: maxPower,
         timeUseSettingItems: slots,
       });
+      await Promise.allSettled([
+        deye.setEnergyPattern("BATTERY_FIRST"),
+        deye.setZeroExportPower(maxPower),
+      ]);
       break;
     }
     case "CHARGE": {
@@ -189,10 +190,12 @@ async function applyAction(
         touAction: "off",
         maxSellPower: maxPower,
         maxSolarPower: 15000,
-        energyPattern: "LOAD_FIRST",
-        zeroExportPower: 20,
         timeUseSettingItems: slots,
       });
+      await Promise.allSettled([
+        deye.setEnergyPattern("LOAD_FIRST"),
+        deye.setZeroExportPower(20),
+      ]);
       break;
     }
   }
