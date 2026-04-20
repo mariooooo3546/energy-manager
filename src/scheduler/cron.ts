@@ -208,6 +208,13 @@ async function applyAction(
         maxSolarPower: 15000,
         timeUseSettingItems: inactiveSlots,
       });
+      // dynamicControl with workMode:ZERO_EXPORT_TO_LOAD silently ignores
+      // timeUseSettingItems, so slots from a prior SELL call linger
+      // (hold-slots with soc=100 then clamp discharge). Force-write the
+      // slots via the dedicated TOU endpoint.
+      await deye.updateTou("on", inactiveSlots).catch((err) =>
+        console.error("[Apply] NORMAL: updateTou failed:", err)
+      );
       await Promise.allSettled([
         // LOAD_FIRST: PV/MI → load first, surplus charges battery.
         // BATTERY_FIRST would route PV to battery first and force grid
