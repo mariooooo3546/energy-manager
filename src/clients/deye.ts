@@ -256,7 +256,6 @@ export class DeyeCloudClient {
     items: TouTimeSlot[]
   ): Promise<void> {
     await this.authenticate();
-    // Keep HH:MM format as required by API, include voltage field
     const formatted = items.map((s) => ({
       time: s.time,
       power: s.power,
@@ -267,6 +266,7 @@ export class DeyeCloudClient {
     }));
     const body = {
       deviceSn: this.config.deviceSn,
+      touAction,
       timeUseSettingItems: formatted,
       timeoutSeconds: 30,
     };

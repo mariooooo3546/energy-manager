@@ -194,6 +194,12 @@ async function applyAction(
         maxSolarPower: 15000,
         timeUseSettingItems: slots,
       });
+      // Deye's /strategy/dynamicControl ignores touAction:"off" when slots are
+      // non-empty — the checkbox stays ticked and TOU keeps clamping battery
+      // at slot SOC. Force it off via the dedicated TOU endpoint.
+      await deye.updateTou("off", []).catch((err) =>
+        console.error("[Apply] NORMAL: updateTou off failed:", err)
+      );
       await Promise.allSettled([
         deye.setEnergyPattern("LOAD_FIRST"),
         deye.setZeroExportPower(20),
