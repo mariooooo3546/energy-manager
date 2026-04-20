@@ -182,34 +182,33 @@ async function applyAction(
       break;
     }
     case "NORMAL": {
-      // Self-consumption: battery covers load, PV surplus exports, no grid buy.
-      // Deye's TOU cannot be reliably turned off via API — both
-      // /strategy/dynamicControl and /order/sys/tou/update silently keep
-      // touAction:"on". Instead, emit 6 permissive slots across the day
-      // (max discharge power, min SOC=Batt Low) so TOU stays enabled but
-      // doesn't clamp the battery. workMode=ZERO_EXPORT_TO_LOAD still
-      // prevents grid export.
-      const permissiveSlots: TouTimeSlot[] = [0, 4, 8, 12, 16, 20].map((h) => ({
+      // Pure self-consumption: battery covers load, MI/PV surplus charges
+      // battery, no grid export, no grid buy.
+      //
+      // Two quirks forced this shape:
+      //   1. Deye ignores touAction:"off", so we can't turn TOU off — we
+      //      neutralize it with enableGeneration:false slots instead.
+      //      Slot is then "inactive"; workMode takes over.
+      //   2. solarSellAction:"on" exports MI/PV surplus instead of
+      //      routing it to battery charging — we want the opposite.
+      const inactiveSlots: TouTimeSlot[] = [0, 4, 8, 12, 16, 20].map((h) => ({
         time: `${String(h).padStart(2, "0")}:00`,
-        power: maxPower,
+        power: 0,
         soc: 10,
-        enableGeneration: true,
+        enableGeneration: false,
         enableGridCharge: false,
       }));
-      console.log("[Apply] NORMAL: ZERO_EXPORT_TO_LOAD + permissive TOU slots");
+      console.log("[Apply] NORMAL: ZERO_EXPORT_TO_LOAD + solarSell off + inactive TOU");
       await deye.setDynamicControl({
         workMode: "ZERO_EXPORT_TO_LOAD",
-        solarSellAction: "on",
+        solarSellAction: "off",
         gridChargeAction: "off",
         touAction: "on",
         maxSellPower: maxPower,
         maxSolarPower: 15000,
-        timeUseSettingItems: permissiveSlots,
+        timeUseSettingItems: inactiveSlots,
       });
       await Promise.allSettled([
-        // BATTERY_FIRST in Deye prioritizes battery discharge over grid
-        // import for covering load — better for self-consumption than the
-        // misleadingly-named LOAD_FIRST (which routes PV to load first).
         deye.setEnergyPattern("BATTERY_FIRST"),
         deye.setZeroExportPower(20),
       ]);
