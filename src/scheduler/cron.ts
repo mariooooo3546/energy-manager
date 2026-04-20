@@ -194,7 +194,7 @@ async function applyAction(
       const inactiveSlots: TouTimeSlot[] = [0, 4, 8, 12, 16, 20].map((h) => ({
         time: `${String(h).padStart(2, "0")}:00`,
         power: 0,
-        soc: 10,
+        soc: 20,
         enableGeneration: false,
         enableGridCharge: false,
       }));
@@ -209,7 +209,10 @@ async function applyAction(
         timeUseSettingItems: inactiveSlots,
       });
       await Promise.allSettled([
-        deye.setEnergyPattern("BATTERY_FIRST"),
+        // LOAD_FIRST: PV/MI → load first, surplus charges battery.
+        // BATTERY_FIRST would route PV to battery first and force grid
+        // import for load — wrong for self-consumption.
+        deye.setEnergyPattern("LOAD_FIRST"),
         deye.setZeroExportPower(20),
       ]);
       break;
