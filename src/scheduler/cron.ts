@@ -183,24 +183,29 @@ async function applyAction(
     }
     case "NORMAL": {
       // Self-consumption: battery covers load, PV surplus exports, no grid buy.
-      const slots = await buildTouSlots();
-      console.log("[Apply] NORMAL: ZERO_EXPORT_TO_LOAD + TOU off, solarSell on");
+      // Deye's TOU cannot be reliably turned off via API — both
+      // /strategy/dynamicControl and /order/sys/tou/update silently keep
+      // touAction:"on". Instead, emit 6 permissive slots across the day
+      // (max discharge power, min SOC=Batt Low) so TOU stays enabled but
+      // doesn't clamp the battery. workMode=ZERO_EXPORT_TO_LOAD still
+      // prevents grid export.
+      const permissiveSlots: TouTimeSlot[] = [0, 4, 8, 12, 16, 20].map((h) => ({
+        time: `${String(h).padStart(2, "0")}:00`,
+        power: maxPower,
+        soc: 10,
+        enableGeneration: true,
+        enableGridCharge: false,
+      }));
+      console.log("[Apply] NORMAL: ZERO_EXPORT_TO_LOAD + permissive TOU slots");
       await deye.setDynamicControl({
         workMode: "ZERO_EXPORT_TO_LOAD",
         solarSellAction: "on",
         gridChargeAction: "off",
-        touAction: "off",
+        touAction: "on",
         maxSellPower: maxPower,
         maxSolarPower: 15000,
-        timeUseSettingItems: slots,
+        timeUseSettingItems: permissiveSlots,
       });
-      // Deye's /strategy/dynamicControl ignores touAction:"off" when slots are
-      // non-empty — the checkbox stays ticked and TOU keeps clamping battery
-      // at slot SOC. Force it off via the dedicated TOU endpoint; keep slots
-      // populated (empty array is rejected by the API).
-      await deye.updateTou("off", slots).catch((err) =>
-        console.error("[Apply] NORMAL: updateTou off failed:", err)
-      );
       await Promise.allSettled([
         deye.setEnergyPattern("LOAD_FIRST"),
         deye.setZeroExportPower(20),
