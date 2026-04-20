@@ -207,7 +207,10 @@ async function applyAction(
         timeUseSettingItems: permissiveSlots,
       });
       await Promise.allSettled([
-        deye.setEnergyPattern("LOAD_FIRST"),
+        // BATTERY_FIRST in Deye prioritizes battery discharge over grid
+        // import for covering load — better for self-consumption than the
+        // misleadingly-named LOAD_FIRST (which routes PV to load first).
+        deye.setEnergyPattern("BATTERY_FIRST"),
         deye.setZeroExportPower(20),
       ]);
       break;
