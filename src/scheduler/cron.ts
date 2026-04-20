@@ -196,8 +196,9 @@ async function applyAction(
       });
       // Deye's /strategy/dynamicControl ignores touAction:"off" when slots are
       // non-empty — the checkbox stays ticked and TOU keeps clamping battery
-      // at slot SOC. Force it off via the dedicated TOU endpoint.
-      await deye.updateTou("off", []).catch((err) =>
+      // at slot SOC. Force it off via the dedicated TOU endpoint; keep slots
+      // populated (empty array is rejected by the API).
+      await deye.updateTou("off", slots).catch((err) =>
         console.error("[Apply] NORMAL: updateTou off failed:", err)
       );
       await Promise.allSettled([
